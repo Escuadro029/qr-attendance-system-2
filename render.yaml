@@ -8,11 +8,12 @@ services:
   # ---- Backend API (Node/Express) ----
   - type: web
     name: qr-attendance-backend
-    runtime: docker
-    dockerfilePath: ./backend/Dockerfile
-    dockerContext: ./backend
+    runtime: node
+    rootDir: backend
     plan: free
     region: singapore
+    buildCommand: npm install
+    startCommand: node src/server.js
     envVars:
       - key: DATABASE_URL
         fromDatabase:
