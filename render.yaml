@@ -1,0 +1,41 @@
+databases:
+  - name: qr-attendance-db
+    plan: free
+    region: singapore # closest to PH; change if your Render account uses a different region
+    postgresMajorVersion: 16
+
+services:
+  # ---- Backend API (Node/Express) ----
+  - type: web
+    name: qr-attendance-backend
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    plan: free
+    region: singapore
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: qr-attendance-db
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: CORS_ORIGIN
+        value: "https://qr-attendance-frontend.onrender.com"
+      - key: SEED_ADMIN_EMAIL
+        value: admin@school.edu.ph
+      - key: SEED_ADMIN_PASSWORD
+        sync: false # set this manually in the Render dashboard, don't commit it
+
+  # ---- Frontend (Angular static build) ----
+  - type: web
+    name: qr-attendance-frontend
+    runtime: static
+    plan: free
+    region: singapore
+    buildCommand: cd frontend && npm install && npm run build -- --configuration production
+    staticPublishPath: ./frontend/dist/frontend/browser
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html

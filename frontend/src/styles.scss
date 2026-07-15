@@ -1,0 +1,163 @@
+// ==========================================================================
+// QR Attendance — School Press Conference theme
+// Palette: deep navy (authority/DepEd) + press-gold (award/masthead accent)
+// Typography: serif for headlines (newspaper masthead feel),
+//             clean sans for UI (modern & minimalist for daily use)
+// ==========================================================================
+
+:root {
+  --navy: #0b1f3a;
+  --navy-light: #16305a;
+  --gold: #c7a24a;
+  --gold-light: #e8d7a8;
+  --ink: #1a1a1a;
+  --paper: #f7f5f0;
+  --paper-card: #ffffff;
+  --border: #e2ddd1;
+  --success: #1f8a4c;
+  --danger: #c23b3b;
+  --radius: 10px;
+  --shadow: 0 2px 10px rgba(11, 31, 58, 0.08);
+  --font-headline: 'Georgia', 'Times New Roman', serif;
+  --font-ui: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-ui);
+}
+
+h1, h2, h3, .headline {
+  font-family: var(--font-headline);
+  color: var(--navy);
+  margin: 0;
+}
+
+a {
+  color: var(--navy);
+}
+
+button {
+  font-family: inherit;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 18px;
+  border-radius: var(--radius);
+  border: none;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.06s ease, opacity 0.15s ease;
+
+  &:active { transform: scale(0.98); }
+  &:disabled { opacity: 0.5; cursor: not-allowed; }
+}
+
+.btn-primary {
+  background: var(--navy);
+  color: white;
+  &:hover { background: var(--navy-light); }
+}
+
+.btn-gold {
+  background: var(--gold);
+  color: var(--navy);
+  &:hover { background: var(--gold-light); }
+}
+
+.btn-outline {
+  background: transparent;
+  color: var(--navy);
+  border: 1.5px solid var(--navy);
+}
+
+.btn-danger {
+  background: var(--danger);
+  color: white;
+}
+
+.card {
+  background: var(--paper-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 20px;
+}
+
+input, select {
+  font-family: inherit;
+  padding: 10px 12px;
+  border: 1.5px solid var(--border);
+  border-radius: 8px;
+  font-size: 0.95rem;
+  width: 100%;
+
+  &:focus {
+    outline: none;
+    border-color: var(--navy);
+  }
+}
+
+label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--navy-light);
+  display: block;
+  margin-bottom: 4px;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th, td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  font-size: 0.9rem;
+}
+
+th {
+  color: var(--navy-light);
+  text-transform: uppercase;
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+}
+
+.badge {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.badge-qualified {
+  background: rgba(31, 138, 76, 0.12);
+  color: var(--success);
+}
+
+.badge-progress {
+  background: rgba(199, 162, 74, 0.15);
+  color: #8a6d1f;
+}
+
+.container {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 24px 20px 60px;
+}
