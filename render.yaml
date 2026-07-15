@@ -22,7 +22,7 @@ services:
       - key: JWT_SECRET
         generateValue: true
       - key: CORS_ORIGIN
-        value: "https://qr-attendance-frontend.onrender.com"
+        value: "https://qr-attendance-frontend-nh74.onrender.com"
       - key: SEED_ADMIN_EMAIL
         value: admin@school.edu.ph
       - key: SEED_ADMIN_PASSWORD
