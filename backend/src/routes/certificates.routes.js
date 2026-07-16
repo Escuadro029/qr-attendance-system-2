@@ -26,6 +26,21 @@ router.get('/qualified', requireAuth, async (req, res) => {
   }
 });
 
+// GET /api/certificates/sample.pdf -> preview certificate with placeholder data
+// (must be registered before /:studentId.pdf, which would otherwise treat
+// "sample" as a studentId and shadow this route)
+router.get('/sample.pdf', requireAuth, (req, res) => {
+  res.set('Content-Type', 'application/pdf');
+  res.set('Content-Disposition', 'inline; filename="certificate-sample.pdf"');
+  renderCertificatePdf({
+    student: { full_name: 'Juan Dela Cruz', grade: '10', section: 'Rizal' },
+    categoriesCompleted: 8,
+    schoolName: req.query.school || 'Your School Name',
+    divisionName: req.query.division || 'Schools Division Office',
+    dateRange: req.query.dates || 'August 1, 8, and 15, 2026',
+  }, res);
+});
+
 // GET /api/certificates/:studentId.pdf -> generate certificate (only if qualified)
 router.get('/:studentId.pdf', requireAuth, async (req, res) => {
   try {

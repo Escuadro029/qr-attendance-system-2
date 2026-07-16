@@ -2,7 +2,7 @@ import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
-import { Student, Category, ProgressRow, ScanResult, AttendanceRecord, AppUser } from '../models/models';
+import { Student, Category, ProgressRow, ScanResult, AttendanceRecord, AppUser, Ranking } from '../models/models';
 
 @Injectable({ providedIn: 'root' })
 export class ApiService {
@@ -48,6 +48,19 @@ export class ApiService {
     return this.http.get(`${this.base}/students/${studentId}/id-card.pdf`, { responseType: 'blob' });
   }
 
+  updateStudent(id: string, payload: Partial<Student>): Observable<Student> {
+    return this.http.put<Student>(`${this.base}/students/${id}`, payload);
+  }
+
+  // Bulk printable sheet: several ID cards laid out on one Letter page.
+  // Pass an array of student ids, or omit/pass 'all' for every student.
+  getBulkIdCardsBlob(ids?: string[] | 'all'): Observable<Blob> {
+    const idsParam = !ids || ids === 'all' ? 'all' : ids.join(',');
+    return this.http.get(`${this.base}/students/id-cards/bulk.pdf?ids=${encodeURIComponent(idsParam)}`, {
+      responseType: 'blob',
+    });
+  }
+
   // Categories
   getCategories(): Observable<Category[]> {
     return this.http.get<Category[]>(`${this.base}/categories`);
@@ -77,5 +90,26 @@ export class ApiService {
     if (dates) params.set('dates', dates);
     const qs = params.toString();
     return this.http.get(`${this.base}/certificates/${studentId}.pdf${qs ? '?' + qs : ''}`, { responseType: 'blob' });
+  }
+
+  getSampleCertificateBlob(): Observable<Blob> {
+    return this.http.get(`${this.base}/certificates/sample.pdf`, { responseType: 'blob' });
+  }
+
+  // Rankings (per-category 1st/2nd/3rd place)
+  getRankings(): Observable<Ranking[]> {
+    return this.http.get<Ranking[]>(`${this.base}/rankings`);
+  }
+
+  setRanking(payload: { category_id: number; student_id: string; rank: 1 | 2 | 3 }): Observable<any> {
+    return this.http.post(`${this.base}/rankings`, payload);
+  }
+
+  deleteRanking(id: string): Observable<{ message: string }> {
+    return this.http.delete<{ message: string }>(`${this.base}/rankings/${id}`);
+  }
+
+  getRankingCertificateBlob(rankingId: string): Observable<Blob> {
+    return this.http.get(`${this.base}/rankings/${rankingId}/certificate.pdf`, { responseType: 'blob' });
   }
 }

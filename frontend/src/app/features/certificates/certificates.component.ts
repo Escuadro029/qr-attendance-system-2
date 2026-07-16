@@ -1,15 +1,22 @@
 import { Component, OnInit, signal } from '@angular/core';
+import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 import { ApiService } from '../../core/services/api.service';
 import { ProgressRow } from '../../core/models/models';
+import { DocumentModalComponent } from '../../shared/components/document-modal/document-modal.component';
 
 @Component({
   selector: 'app-certificates',
   standalone: true,
-  imports: [],
+  imports: [DocumentModalComponent],
   template: `
     <div class="container">
-      <h1 class="headline">Certificates</h1>
-      <p class="lede">Students who completed {{ threshold() }} or more journalism categories qualify for a Certificate of Recognition.</p>
+      <div class="head-row">
+        <div>
+          <h1 class="headline">Certificates</h1>
+          <p class="lede">Students who completed {{ threshold() }} or more journalism categories qualify for a Certificate of Recognition.</p>
+        </div>
+        <button class="btn btn-outline" (click)="viewSample()">Preview Sample Certificate</button>
+      </div>
 
       <div class="card">
         @if (loading()) {
@@ -45,9 +52,21 @@ import { ProgressRow } from '../../core/models/models';
         }
       </div>
     </div>
+
+    <app-document-modal
+      [open]="modalOpen()"
+      [title]="'Sample Certificate of Recognition'"
+      [kind]="'pdf'"
+      [objectUrl]="modalUrl()"
+      [loading]="modalLoading()"
+      [errorMessage]="modalError()"
+      (close)="closeModal()"
+      (download)="downloadSample()"
+    ></app-document-modal>
   `,
   styles: [`
-    .lede { color: #666; margin: 6px 0 24px; }
+    .head-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 24px; }
+    .lede { color: #666; margin: 6px 0 0; }
     .placeholder { color: #999; font-size: 0.85rem; text-align: center; padding: 20px 0; }
     .btn-sm { padding: 6px 12px; font-size: 0.8rem; }
   `],
@@ -58,7 +77,14 @@ export class CertificatesComponent implements OnInit {
   loading = signal(true);
   downloadingId = signal<string | null>(null);
 
-  constructor(private api: ApiService) {}
+  modalOpen = signal(false);
+  modalUrl = signal<string | SafeResourceUrl | null>(null);
+  modalLoading = signal(false);
+  modalError = signal('');
+  private sampleBlob: Blob | null = null;
+  private sampleRawUrl: string | null = null;
+
+  constructor(private api: ApiService, private sanitizer: DomSanitizer) {}
 
   ngOnInit() {
     this.api.getQualified().subscribe({
@@ -83,5 +109,40 @@ export class CertificatesComponent implements OnInit {
       },
       complete: () => this.downloadingId.set(null),
     });
+  }
+
+  viewSample() {
+    this.modalOpen.set(true);
+    this.modalLoading.set(true);
+    this.modalError.set('');
+    this.api.getSampleCertificateBlob().subscribe({
+      next: (blob) => {
+        this.sampleBlob = blob;
+        const url = URL.createObjectURL(blob);
+        this.sampleRawUrl = url;
+        this.modalUrl.set(this.sanitizer.bypassSecurityTrustResourceUrl(url));
+      },
+      error: () => this.modalError.set('Could not load sample certificate.'),
+      complete: () => this.modalLoading.set(false),
+    });
+  }
+
+  closeModal() {
+    this.modalOpen.set(false);
+    if (this.sampleRawUrl) {
+      URL.revokeObjectURL(this.sampleRawUrl);
+      this.sampleRawUrl = null;
+    }
+    this.sampleBlob = null;
+  }
+
+  downloadSample() {
+    if (!this.sampleBlob) return;
+    const url = URL.createObjectURL(this.sampleBlob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'certificate-sample.pdf';
+    a.click();
+    URL.revokeObjectURL(url);
   }
 }

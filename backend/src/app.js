@@ -7,6 +7,7 @@ const studentsRoutes = require('./routes/students.routes');
 const categoriesRoutes = require('./routes/categories.routes');
 const attendanceRoutes = require('./routes/attendance.routes');
 const certificatesRoutes = require('./routes/certificates.routes');
+const rankingsRoutes = require('./routes/rankings.routes');
 
 const app = express();
 
@@ -24,6 +25,7 @@ app.use('/api/students', studentsRoutes);
 app.use('/api/categories', categoriesRoutes);
 app.use('/api/attendance', attendanceRoutes);
 app.use('/api/certificates', certificatesRoutes);
+app.use('/api/rankings', rankingsRoutes);
 
 // 404
 app.use((req, res) => res.status(404).json({ error: 'Not found' }));

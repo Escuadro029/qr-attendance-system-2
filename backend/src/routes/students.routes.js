@@ -2,7 +2,7 @@ const express = require('express');
 const pool = require('../config/db');
 const { requireAuth } = require('../middleware/auth.middleware');
 const { generateQrPngBuffer } = require('../utils/qrGenerator');
-const { renderIdCardPdf } = require('../utils/idCardGenerator');
+const { renderIdCardPdf, renderIdCardsBulkPdf } = require('../utils/idCardGenerator');
 
 const router = express.Router();
 
@@ -83,6 +83,57 @@ router.get('/:id/id-card.pdf', requireAuth, async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to generate ID card' });
+  }
+});
+
+// PUT /api/students/:id  -> edit a student's details (QR token is never changed)
+router.put('/:id', requireAuth, async (req, res) => {
+  const { full_name, grade, section, lrn, student_id_no, school_name } = req.body;
+  if (!full_name || !grade || !section) {
+    return res.status(400).json({ error: 'full_name, grade and section are required' });
+  }
+
+  try {
+    const result = await pool.query(
+      `UPDATE students
+       SET full_name = $1, grade = $2, section = $3, lrn = $4, student_id_no = $5,
+           school_name = COALESCE($6, school_name)
+       WHERE id = $7
+       RETURNING *`,
+      [full_name, grade, section, lrn || null, student_id_no || null, school_name || null, req.params.id]
+    );
+    if (result.rowCount === 0) return res.status(404).json({ error: 'Student not found' });
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to update student' });
+  }
+});
+
+// GET /api/students/id-cards/bulk.pdf?ids=uuid1,uuid2,...  (or ?ids=all)
+// Printable sheet: multiple press-pass ID cards laid out on one Letter
+// ("short") bond paper page, with dashed cut-lines, so a teacher can print
+// once and cut out several cards instead of one page per student.
+router.get('/id-cards/bulk.pdf', requireAuth, async (req, res) => {
+  try {
+    const idsParam = req.query.ids;
+    let result;
+    if (!idsParam || idsParam === 'all') {
+      result = await pool.query('SELECT * FROM students ORDER BY grade, section, full_name');
+    } else {
+      const ids = idsParam.split(',').filter(Boolean);
+      if (ids.length === 0) return res.status(400).json({ error: 'No student ids provided.' });
+      result = await pool.query('SELECT * FROM students WHERE id = ANY($1::uuid[])', [ids]);
+    }
+
+    if (result.rowCount === 0) return res.status(404).json({ error: 'No students found.' });
+
+    res.set('Content-Type', 'application/pdf');
+    res.set('Content-Disposition', 'inline; filename="id-cards-bulk.pdf"');
+    await renderIdCardsBulkPdf(result.rows, res);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to generate bulk ID card sheet' });
   }
 });
 

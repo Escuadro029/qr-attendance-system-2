@@ -47,6 +47,21 @@ CREATE TABLE IF NOT EXISTS attendance (
   UNIQUE (student_id, category_id, attendance_date)
 );
 
+-- Per-category ranking (1st / 2nd / 3rd place), used to generate
+-- "Certificate of Recognition" awards distinct from the completion
+-- certificate. Only one student can hold a given rank per category.
+CREATE TABLE IF NOT EXISTS category_rankings (
+  id            UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  category_id   INT  NOT NULL REFERENCES categories(id) ON DELETE CASCADE,
+  student_id    UUID NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+  rank          INT  NOT NULL CHECK (rank IN (1, 2, 3)),
+  control_no    VARCHAR(50),
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (category_id, rank)
+);
+
+
 CREATE INDEX IF NOT EXISTS idx_attendance_student ON attendance(student_id);
 CREATE INDEX IF NOT EXISTS idx_attendance_category ON attendance(category_id);
 CREATE INDEX IF NOT EXISTS idx_students_qr_token ON students(qr_token);
+CREATE INDEX IF NOT EXISTS idx_rankings_category ON category_rankings(category_id);

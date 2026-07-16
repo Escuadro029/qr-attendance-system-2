@@ -1,3 +1,16 @@
+export interface Ranking {
+  id: string;
+  category_id: number;
+  category_name: string;
+  student_id: string;
+  student_name: string;
+  grade: string;
+  section: string;
+  rank: 1 | 2 | 3;
+  control_no: string;
+  created_at: string;
+}
+
 export interface AppUser {
   id: string;
   full_name: string;

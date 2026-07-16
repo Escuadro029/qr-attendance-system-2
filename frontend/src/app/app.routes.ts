@@ -36,6 +36,11 @@ export const routes: Routes = [
       import('./features/certificates/certificates.component').then((m) => m.CertificatesComponent),
   },
   {
+    path: 'rankings',
+    canActivate: [authGuard],
+    loadComponent: () => import('./features/rankings/rankings.component').then((m) => m.RankingsComponent),
+  },
+  {
     path: 'users',
     canActivate: [authGuard, adminGuard],
     loadComponent: () => import('./features/manage-users/manage-users.component').then((m) => m.ManageUsersComponent),
