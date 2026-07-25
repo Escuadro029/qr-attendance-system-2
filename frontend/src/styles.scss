@@ -138,6 +138,58 @@ th {
   letter-spacing: 0.04em;
 }
 
+// Stack table rows into cards below phone width so no table ever needs a
+// left-right scroll to read. Requires each <td> to carry a `data-label`
+// matching its column header (used as the visible field name via ::before).
+@media (max-width: 640px) {
+  table {
+    border: none;
+  }
+  thead {
+    display: none;
+  }
+  table, tbody, tr, td {
+    display: block;
+    width: 100%;
+  }
+  tr {
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 6px 12px;
+    margin-bottom: 12px;
+  }
+  tr:last-child {
+    margin-bottom: 0;
+  }
+  td {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 3px;
+    padding: 8px 0;
+    border-bottom: 1px dashed var(--border);
+    text-align: left;
+  }
+  td:last-child {
+    border-bottom: none;
+  }
+  td::before {
+    content: attr(data-label);
+    font-weight: 600;
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--navy-light);
+  }
+  td.placeholder {
+    text-align: center;
+    display: block;
+  }
+  td.placeholder::before {
+    content: none;
+  }
+}
+
 .badge {
   display: inline-block;
   padding: 3px 10px;

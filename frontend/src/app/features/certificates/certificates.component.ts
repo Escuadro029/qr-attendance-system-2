@@ -34,10 +34,10 @@ import { DocumentModalComponent } from '../../shared/components/document-modal/d
             <tbody>
               @for (row of qualified(); track row.student_id) {
                 <tr>
-                  <td>{{ row.full_name }}</td>
-                  <td>Grade {{ row.grade }} - {{ row.section }}</td>
-                  <td>{{ row.categories_completed }}</td>
-                  <td>
+                  <td data-label="Student">{{ row.full_name }}</td>
+                  <td data-label="Grade &amp; Section">Grade {{ row.grade }} - {{ row.section }}</td>
+                  <td data-label="Categories Completed">{{ row.categories_completed }}</td>
+                  <td data-label="Certificate">
                     <button class="btn btn-gold btn-sm" (click)="download(row)" [disabled]="downloadingId() === row.student_id">
                       {{ downloadingId() === row.student_id ? 'Preparing…' : 'Download PDF' }}
                     </button>

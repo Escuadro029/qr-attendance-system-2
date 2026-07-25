@@ -71,11 +71,11 @@ const RANK_LABELS: Record<number, string> = { 1: '1st Place', 2: '2nd Place', 3:
             <tbody>
               @for (r of rankings(); track r.id) {
                 <tr>
-                  <td>{{ r.category_name }}</td>
-                  <td><span class="badge" [class.badge-qualified]="r.rank===1" [class.badge-progress]="r.rank!==1">{{ rankLabel(r.rank) }}</span></td>
-                  <td>{{ r.student_name }}</td>
-                  <td>Grade {{ r.grade }} - {{ r.section }}</td>
-                  <td class="actions">
+                  <td data-label="Category">{{ r.category_name }}</td>
+                  <td data-label="Rank"><span class="badge" [class.badge-qualified]="r.rank===1" [class.badge-progress]="r.rank!==1">{{ rankLabel(r.rank) }}</span></td>
+                  <td data-label="Student">{{ r.student_name }}</td>
+                  <td data-label="Grade &amp; Section">Grade {{ r.grade }} - {{ r.section }}</td>
+                  <td class="actions" data-label="Actions">
                     <button class="btn btn-gold btn-sm" (click)="viewCertificate(r)">Certificate</button>
                     <button class="btn btn-danger btn-sm" (click)="remove(r)">Remove</button>
                   </td>

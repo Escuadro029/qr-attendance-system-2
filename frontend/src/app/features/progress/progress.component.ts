@@ -54,10 +54,10 @@ type ModalKind = 'image' | 'pdf' | null;
             <tbody>
               @for (row of filtered(); track row.student_id) {
                 <tr>
-                  <td><input type="checkbox" [checked]="selectedIds().has(row.student_id)" (change)="toggleSelect(row.student_id)" /></td>
-                  <td>{{ row.full_name }}</td>
-                  <td>Grade {{ row.grade }} - {{ row.section }}</td>
-                  <td>
+                  <td data-label="Select"><input type="checkbox" [checked]="selectedIds().has(row.student_id)" (change)="toggleSelect(row.student_id)" /></td>
+                  <td data-label="Student">{{ row.full_name }}</td>
+                  <td data-label="Grade &amp; Section">Grade {{ row.grade }} - {{ row.section }}</td>
+                  <td data-label="Categories Completed">
                     <div class="category-chips">
                       @for (name of row.completed_categories; track name) {
                         <span class="chip">{{ name }}</span>
@@ -67,14 +67,14 @@ type ModalKind = 'image' | 'pdf' | null;
                       }
                     </div>
                   </td>
-                  <td>
+                  <td data-label="Status">
                     @if (row.categories_completed >= QUALIFYING_THRESHOLD) {
                       <span class="badge badge-qualified">Qualified ✅</span>
                     } @else {
                       <span class="badge badge-progress">{{ row.categories_completed }}/{{ QUALIFYING_THRESHOLD }}</span>
                     }
                   </td>
-                  <td class="actions">
+                  <td class="actions" data-label="View">
                     <button class="btn btn-outline btn-sm" (click)="editStudent(row)">Edit</button>
                     <button class="btn btn-outline btn-sm" (click)="viewQr(row)">QR</button>
                     <button class="btn btn-outline btn-sm" (click)="viewIdCard(row)">ID</button>

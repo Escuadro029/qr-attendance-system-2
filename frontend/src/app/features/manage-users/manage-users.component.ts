@@ -47,10 +47,10 @@ import { AppUser } from '../../core/models/models';
             <tbody>
               @for (u of users(); track u.id) {
                 <tr>
-                  <td>{{ u.full_name }}</td>
-                  <td>{{ u.email }}</td>
-                  <td><span class="badge" [class.badge-qualified]="u.role === 'admin'" [class.badge-progress]="u.role === 'teacher'">{{ u.role }}</span></td>
-                  <td>
+                  <td data-label="Name">{{ u.full_name }}</td>
+                  <td data-label="Email">{{ u.email }}</td>
+                  <td data-label="Role"><span class="badge" [class.badge-qualified]="u.role === 'admin'" [class.badge-progress]="u.role === 'teacher'">{{ u.role }}</span></td>
+                  <td data-label="Actions">
                     @if (u.id !== currentUserId()) {
                       <button class="btn btn-danger btn-sm" (click)="remove(u)">Remove</button>
                     }
