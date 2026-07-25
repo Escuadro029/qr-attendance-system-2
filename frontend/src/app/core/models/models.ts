@@ -67,6 +67,7 @@ export interface ProgressRow {
   grade: string;
   section: string;
   categories_completed: number;
+  completed_categories: string[];
 }
 
 export interface ScanResult {

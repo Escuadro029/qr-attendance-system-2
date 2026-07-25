@@ -57,7 +57,16 @@ type ModalKind = 'image' | 'pdf' | null;
                   <td><input type="checkbox" [checked]="selectedIds().has(row.student_id)" (change)="toggleSelect(row.student_id)" /></td>
                   <td>{{ row.full_name }}</td>
                   <td>Grade {{ row.grade }} - {{ row.section }}</td>
-                  <td>{{ row.categories_completed }}</td>
+                  <td>
+                    <div class="category-chips">
+                      @for (name of row.completed_categories; track name) {
+                        <span class="chip">{{ name }}</span>
+                      }
+                      @empty {
+                        <span class="placeholder-inline">None yet</span>
+                      }
+                    </div>
+                  </td>
                   <td>
                     @if (row.categories_completed >= QUALIFYING_THRESHOLD) {
                       <span class="badge badge-qualified">Qualified ✅</span>
@@ -113,6 +122,18 @@ type ModalKind = 'image' | 'pdf' | null;
     .selected-count { font-size: 0.8rem; color: #777; }
     .actions { display: flex; gap: 6px; flex-wrap: wrap; }
     .btn-sm { padding: 6px 10px; font-size: 0.78rem; }
+    .category-chips { display: flex; flex-wrap: wrap; gap: 4px; max-width: 240px; }
+    .chip {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 0.72rem;
+      font-weight: 600;
+      background: rgba(31, 41, 61, 0.06);
+      color: var(--navy);
+      white-space: nowrap;
+    }
+    .placeholder-inline { color: #999; font-size: 0.8rem; }
   `],
 })
 export class ProgressComponent implements OnInit {

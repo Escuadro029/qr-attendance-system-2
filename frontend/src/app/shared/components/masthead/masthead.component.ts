@@ -73,9 +73,9 @@ import { AuthService } from '../../../core/services/auth.service';
       max-width: 1100px;
       margin: 0 auto;
       display: flex;
+      flex-wrap: wrap;
       gap: 4px;
       padding: 0 20px;
-      overflow-x: auto;
     }
     .masthead-nav a {
       color: var(--gold-light);
@@ -89,6 +89,23 @@ import { AuthService } from '../../../core/services/auth.service';
     .masthead-nav a.active, .masthead-nav a:hover {
       color: white;
       border-bottom-color: var(--gold);
+    }
+
+    @media (max-width: 640px) {
+      .masthead-top {
+        padding: 12px 14px;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+      .brand-sub { display: none; }
+      .masthead-nav {
+        padding: 0 8px 6px;
+        gap: 2px;
+      }
+      .masthead-nav a {
+        font-size: 0.78rem;
+        padding: 8px 8px;
+      }
     }
   `],
 })
