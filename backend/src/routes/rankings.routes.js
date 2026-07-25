@@ -2,6 +2,7 @@ const express = require('express');
 const pool = require('../config/db');
 const { requireAuth } = require('../middleware/auth.middleware');
 const { renderRankingCertificatePdf, generateControlNo } = require('../utils/certificateGenerator');
+const { safeFilename } = require('../utils/safeFilename');
 
 const router = express.Router();
 
@@ -17,12 +18,12 @@ router.post('/', requireAuth, async (req, res) => {
   try {
     const controlNo = generateControlNo('PRESSCONF-RANK');
     const result = await pool.query(
-      `INSERT INTO category_rankings (category_id, student_id, rank, control_no)
-       VALUES ($1, $2, $3, $4)
+      `INSERT INTO category_rankings (tenant_id, category_id, student_id, rank, control_no)
+       VALUES ($1, $2, $3, $4, $5)
        ON CONFLICT (category_id, rank)
        DO UPDATE SET student_id = EXCLUDED.student_id, control_no = category_rankings.control_no
        RETURNING *`,
-      [category_id, student_id, rank, controlNo]
+      [req.user.tenant_id, category_id, student_id, rank, controlNo]
     );
     res.status(201).json(result.rows[0]);
   } catch (err) {
@@ -34,14 +35,18 @@ router.post('/', requireAuth, async (req, res) => {
 // GET /api/rankings  -> all rankings, joined with student + category names
 router.get('/', requireAuth, async (req, res) => {
   try {
-    const result = await pool.query(`
+    const result = await pool.query(
+      `
       SELECT r.id, r.category_id, c.name AS category_name, r.student_id,
              s.full_name AS student_name, s.grade, s.section, r.rank, r.control_no, r.created_at
       FROM category_rankings r
       JOIN categories c ON c.id = r.category_id
       JOIN students s ON s.id = r.student_id
+      WHERE r.tenant_id = $1
       ORDER BY c.sort_order, r.rank
-    `);
+    `,
+      [req.user.tenant_id]
+    );
     res.json(result.rows);
   } catch (err) {
     console.error(err);
@@ -52,15 +57,18 @@ router.get('/', requireAuth, async (req, res) => {
 // GET /api/rankings/category/:categoryId -> rankings for a single category
 router.get('/category/:categoryId', requireAuth, async (req, res) => {
   try {
-    const result = await pool.query(`
+    const result = await pool.query(
+      `
       SELECT r.id, r.category_id, c.name AS category_name, r.student_id,
              s.full_name AS student_name, s.grade, s.section, r.rank, r.control_no
       FROM category_rankings r
       JOIN categories c ON c.id = r.category_id
       JOIN students s ON s.id = r.student_id
-      WHERE r.category_id = $1
+      WHERE r.category_id = $1 AND r.tenant_id = $2
       ORDER BY r.rank
-    `, [req.params.categoryId]);
+    `,
+      [req.params.categoryId, req.user.tenant_id]
+    );
     res.json(result.rows);
   } catch (err) {
     console.error(err);
@@ -71,7 +79,10 @@ router.get('/category/:categoryId', requireAuth, async (req, res) => {
 // DELETE /api/rankings/:id
 router.delete('/:id', requireAuth, async (req, res) => {
   try {
-    const result = await pool.query('DELETE FROM category_rankings WHERE id = $1 RETURNING id', [req.params.id]);
+    const result = await pool.query('DELETE FROM category_rankings WHERE id = $1 AND tenant_id = $2 RETURNING id', [
+      req.params.id,
+      req.user.tenant_id,
+    ]);
     if (result.rowCount === 0) return res.status(404).json({ error: 'Ranking not found' });
     res.json({ message: 'Ranking removed.' });
   } catch (err) {
@@ -83,19 +94,22 @@ router.delete('/:id', requireAuth, async (req, res) => {
 // GET /api/rankings/:id/certificate.pdf -> generate the ranking certificate
 router.get('/:id/certificate.pdf', requireAuth, async (req, res) => {
   try {
-    const result = await pool.query(`
+    const result = await pool.query(
+      `
       SELECT r.*, c.name AS category_name, s.full_name, s.grade, s.section, s.qr_token, s.school_name
       FROM category_rankings r
       JOIN categories c ON c.id = r.category_id
       JOIN students s ON s.id = r.student_id
-      WHERE r.id = $1
-    `, [req.params.id]);
+      WHERE r.id = $1 AND r.tenant_id = $2
+    `,
+      [req.params.id, req.user.tenant_id]
+    );
 
     if (result.rowCount === 0) return res.status(404).json({ error: 'Ranking not found' });
     const row = result.rows[0];
 
     res.set('Content-Type', 'application/pdf');
-    res.set('Content-Disposition', `inline; filename="ranking-certificate-${row.full_name.replace(/\s+/g, '_')}.pdf"`);
+    res.set('Content-Disposition', `inline; filename="ranking-certificate-${safeFilename(row.full_name)}.pdf"`);
 
     await renderRankingCertificatePdf({
       student: { full_name: row.full_name, grade: row.grade, section: row.section, qr_token: row.qr_token },

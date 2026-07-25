@@ -22,12 +22,29 @@ async function run() {
     const schema = fs.readFileSync(path.join(__dirname, '../config/schema.sql'), 'utf8');
     await client.query(schema);
 
+    const tenantName = process.env.SEED_TENANT_NAME || 'The Press Conference School';
+    const tenantIndustry = process.env.SEED_TENANT_INDUSTRY || 'education';
+
+    console.log(`Resolving tenant: ${tenantName}`);
+    const tenantExisting = await client.query('SELECT id FROM tenants WHERE name = $1', [tenantName]);
+    let tenantId;
+    if (tenantExisting.rowCount > 0) {
+      tenantId = tenantExisting.rows[0].id;
+    } else {
+      const tenantInsert = await client.query(
+        `INSERT INTO tenants (name, industry) VALUES ($1, $2) RETURNING id`,
+        [tenantName, tenantIndustry]
+      );
+      tenantId = tenantInsert.rows[0].id;
+      console.log(`Created tenant "${tenantName}" (${tenantIndustry})`);
+    }
+
     console.log('Seeding categories...');
     for (let i = 0; i < CATEGORIES.length; i++) {
       await client.query(
-        `INSERT INTO categories (name, sort_order) VALUES ($1, $2)
-         ON CONFLICT (name) DO NOTHING`,
-        [CATEGORIES[i], i]
+        `INSERT INTO categories (tenant_id, name, sort_order) VALUES ($1, $2, $3)
+         ON CONFLICT (tenant_id, name) DO NOTHING`,
+        [tenantId, CATEGORIES[i], i]
       );
     }
 
@@ -38,9 +55,9 @@ async function run() {
       console.log(`Creating default teacher/admin account: ${adminEmail}`);
       const hash = await bcrypt.hash(adminPass, 10);
       await client.query(
-        `INSERT INTO users (full_name, email, password_hash, role)
-         VALUES ($1, $2, $3, 'admin')`,
-        ['Press Conference Admin', adminEmail, hash]
+        `INSERT INTO users (tenant_id, full_name, email, password_hash, role)
+         VALUES ($1, $2, $3, $4, 'admin')`,
+        [tenantId, 'Press Conference Admin', adminEmail, hash]
       );
       console.log(`   Default password: ${adminPass} (change this after first login)`);
     } else {

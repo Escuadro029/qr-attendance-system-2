@@ -2,6 +2,7 @@ const express = require('express');
 const pool = require('../config/db');
 const { requireAuth } = require('../middleware/auth.middleware');
 const { renderCertificatePdf } = require('../utils/certificateGenerator');
+const { safeFilename } = require('../utils/safeFilename');
 
 const router = express.Router();
 const QUALIFYING_THRESHOLD = 6;
@@ -14,10 +15,11 @@ router.get('/qualified', requireAuth, async (req, res) => {
               COUNT(DISTINCT a.category_id)::int AS categories_completed
        FROM students s
        JOIN attendance a ON a.student_id = s.id
+       WHERE s.tenant_id = $1
        GROUP BY s.id, s.full_name, s.grade, s.section
-       HAVING COUNT(DISTINCT a.category_id) >= $1
+       HAVING COUNT(DISTINCT a.category_id) >= $2
        ORDER BY categories_completed DESC, s.full_name`,
-      [QUALIFYING_THRESHOLD]
+      [req.user.tenant_id, QUALIFYING_THRESHOLD]
     );
     res.json({ threshold: QUALIFYING_THRESHOLD, qualified: result.rows });
   } catch (err) {
@@ -44,13 +46,16 @@ router.get('/sample.pdf', requireAuth, (req, res) => {
 // GET /api/certificates/:studentId.pdf -> generate certificate (only if qualified)
 router.get('/:studentId.pdf', requireAuth, async (req, res) => {
   try {
-    const studentRes = await pool.query('SELECT * FROM students WHERE id = $1', [req.params.studentId]);
+    const studentRes = await pool.query('SELECT * FROM students WHERE id = $1 AND tenant_id = $2', [
+      req.params.studentId,
+      req.user.tenant_id,
+    ]);
     if (studentRes.rowCount === 0) return res.status(404).json({ error: 'Student not found' });
     const student = studentRes.rows[0];
 
     const countRes = await pool.query(
-      'SELECT COUNT(DISTINCT category_id)::int AS c FROM attendance WHERE student_id = $1',
-      [student.id]
+      'SELECT COUNT(DISTINCT category_id)::int AS c FROM attendance WHERE student_id = $1 AND tenant_id = $2',
+      [student.id, req.user.tenant_id]
     );
     const categoriesCompleted = countRes.rows[0].c;
 
@@ -61,7 +66,7 @@ router.get('/:studentId.pdf', requireAuth, async (req, res) => {
     }
 
     res.set('Content-Type', 'application/pdf');
-    res.set('Content-Disposition', `inline; filename="certificate-${student.full_name.replace(/\s+/g, '_')}.pdf"`);
+    res.set('Content-Disposition', `inline; filename="certificate-${safeFilename(student.full_name)}.pdf"`);
     renderCertificatePdf({
       student,
       categoriesCompleted,

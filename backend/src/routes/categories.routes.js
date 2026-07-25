@@ -7,7 +7,9 @@ const router = express.Router();
 // GET /api/categories
 router.get('/', requireAuth, async (req, res) => {
   try {
-    const result = await pool.query('SELECT * FROM categories ORDER BY sort_order');
+    const result = await pool.query('SELECT * FROM categories WHERE tenant_id = $1 ORDER BY sort_order', [
+      req.user.tenant_id,
+    ]);
     res.json(result.rows);
   } catch (err) {
     console.error(err);

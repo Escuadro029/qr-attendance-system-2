@@ -6,6 +6,8 @@ const { requireAuth, requireAdmin } = require('../middleware/auth.middleware');
 const router = express.Router();
 
 // POST /api/users  (admin only) -> create a new teacher/admin account
+// tenant_id always comes from the admin's own token, never the request
+// body, so an admin can only ever create accounts inside their own tenant.
 router.post('/', requireAuth, requireAdmin, async (req, res) => {
   const { full_name, email, password, role } = req.body;
   if (!full_name || !email || !password) {
@@ -23,10 +25,10 @@ router.post('/', requireAuth, requireAdmin, async (req, res) => {
 
     const hash = await bcrypt.hash(password, 10);
     const result = await pool.query(
-      `INSERT INTO users (full_name, email, password_hash, role)
-       VALUES ($1, $2, $3, $4)
+      `INSERT INTO users (tenant_id, full_name, email, password_hash, role)
+       VALUES ($1, $2, $3, $4, $5)
        RETURNING id, full_name, email, role, created_at`,
-      [full_name, email, hash, role || 'teacher']
+      [req.user.tenant_id, full_name, email, hash, role || 'teacher']
     );
 
     res.status(201).json(result.rows[0]);
@@ -36,11 +38,12 @@ router.post('/', requireAuth, requireAdmin, async (req, res) => {
   }
 });
 
-// GET /api/users  (admin only) -> list all teacher/admin accounts
+// GET /api/users  (admin only) -> list all teacher/admin accounts in this tenant
 router.get('/', requireAuth, requireAdmin, async (req, res) => {
   try {
     const result = await pool.query(
-      'SELECT id, full_name, email, role, created_at FROM users ORDER BY created_at'
+      'SELECT id, full_name, email, role, created_at FROM users WHERE tenant_id = $1 ORDER BY created_at',
+      [req.user.tenant_id]
     );
     res.json(result.rows);
   } catch (err) {
@@ -56,7 +59,10 @@ router.delete('/:id', requireAuth, requireAdmin, async (req, res) => {
     return res.status(400).json({ error: 'You cannot delete your own account while logged in as it.' });
   }
   try {
-    const result = await pool.query('DELETE FROM users WHERE id = $1 RETURNING id', [req.params.id]);
+    const result = await pool.query('DELETE FROM users WHERE id = $1 AND tenant_id = $2 RETURNING id', [
+      req.params.id,
+      req.user.tenant_id,
+    ]);
     if (result.rowCount === 0) return res.status(404).json({ error: 'User not found' });
     res.json({ message: 'User removed.' });
   } catch (err) {

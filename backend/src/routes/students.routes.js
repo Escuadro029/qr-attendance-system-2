@@ -15,10 +15,10 @@ router.post('/', requireAuth, async (req, res) => {
 
   try {
     const result = await pool.query(
-      `INSERT INTO students (full_name, grade, section, lrn, student_id_no, school_name)
-       VALUES ($1, $2, $3, $4, $5, COALESCE($6, 'Your School Name'))
+      `INSERT INTO students (tenant_id, full_name, grade, section, lrn, student_id_no, school_name)
+       VALUES ($1, $2, $3, $4, $5, $6, COALESCE($7, 'Your School Name'))
        RETURNING *`,
-      [full_name, grade, section, lrn || null, student_id_no || null, school_name || null]
+      [req.user.tenant_id, full_name, grade, section, lrn || null, student_id_no || null, school_name || null]
     );
     res.status(201).json(result.rows[0]);
   } catch (err) {
@@ -33,10 +33,12 @@ router.get('/', requireAuth, async (req, res) => {
   try {
     const result = search
       ? await pool.query(
-          `SELECT * FROM students WHERE full_name ILIKE $1 OR section ILIKE $1 ORDER BY full_name`,
-          [`%${search}%`]
+          `SELECT * FROM students WHERE tenant_id = $1 AND (full_name ILIKE $2 OR section ILIKE $2) ORDER BY full_name`,
+          [req.user.tenant_id, `%${search}%`]
         )
-      : await pool.query('SELECT * FROM students ORDER BY grade, section, full_name');
+      : await pool.query('SELECT * FROM students WHERE tenant_id = $1 ORDER BY grade, section, full_name', [
+          req.user.tenant_id,
+        ]);
     res.json(result.rows);
   } catch (err) {
     console.error(err);
@@ -47,7 +49,10 @@ router.get('/', requireAuth, async (req, res) => {
 // GET /api/students/:id
 router.get('/:id', requireAuth, async (req, res) => {
   try {
-    const result = await pool.query('SELECT * FROM students WHERE id = $1', [req.params.id]);
+    const result = await pool.query('SELECT * FROM students WHERE id = $1 AND tenant_id = $2', [
+      req.params.id,
+      req.user.tenant_id,
+    ]);
     if (result.rowCount === 0) return res.status(404).json({ error: 'Student not found' });
     res.json(result.rows[0]);
   } catch (err) {
@@ -59,7 +64,10 @@ router.get('/:id', requireAuth, async (req, res) => {
 // GET /api/students/:id/qrcode.png  -> raw QR PNG (encodes only qr_token)
 router.get('/:id/qrcode.png', requireAuth, async (req, res) => {
   try {
-    const result = await pool.query('SELECT qr_token FROM students WHERE id = $1', [req.params.id]);
+    const result = await pool.query('SELECT qr_token FROM students WHERE id = $1 AND tenant_id = $2', [
+      req.params.id,
+      req.user.tenant_id,
+    ]);
     if (result.rowCount === 0) return res.status(404).json({ error: 'Student not found' });
 
     const buffer = await generateQrPngBuffer(result.rows[0].qr_token);
@@ -74,7 +82,10 @@ router.get('/:id/qrcode.png', requireAuth, async (req, res) => {
 // GET /api/students/:id/id-card.pdf -> printable, DepEd-aligned ID card with QR
 router.get('/:id/id-card.pdf', requireAuth, async (req, res) => {
   try {
-    const result = await pool.query('SELECT * FROM students WHERE id = $1', [req.params.id]);
+    const result = await pool.query('SELECT * FROM students WHERE id = $1 AND tenant_id = $2', [
+      req.params.id,
+      req.user.tenant_id,
+    ]);
     if (result.rowCount === 0) return res.status(404).json({ error: 'Student not found' });
 
     res.set('Content-Type', 'application/pdf');
@@ -98,9 +109,9 @@ router.put('/:id', requireAuth, async (req, res) => {
       `UPDATE students
        SET full_name = $1, grade = $2, section = $3, lrn = $4, student_id_no = $5,
            school_name = COALESCE($6, school_name)
-       WHERE id = $7
+       WHERE id = $7 AND tenant_id = $8
        RETURNING *`,
-      [full_name, grade, section, lrn || null, student_id_no || null, school_name || null, req.params.id]
+      [full_name, grade, section, lrn || null, student_id_no || null, school_name || null, req.params.id, req.user.tenant_id]
     );
     if (result.rowCount === 0) return res.status(404).json({ error: 'Student not found' });
     res.json(result.rows[0]);
@@ -119,11 +130,16 @@ router.get('/id-cards/bulk.pdf', requireAuth, async (req, res) => {
     const idsParam = req.query.ids;
     let result;
     if (!idsParam || idsParam === 'all') {
-      result = await pool.query('SELECT * FROM students ORDER BY grade, section, full_name');
+      result = await pool.query('SELECT * FROM students WHERE tenant_id = $1 ORDER BY grade, section, full_name', [
+        req.user.tenant_id,
+      ]);
     } else {
       const ids = idsParam.split(',').filter(Boolean);
       if (ids.length === 0) return res.status(400).json({ error: 'No student ids provided.' });
-      result = await pool.query('SELECT * FROM students WHERE id = ANY($1::uuid[])', [ids]);
+      result = await pool.query('SELECT * FROM students WHERE id = ANY($1::uuid[]) AND tenant_id = $2', [
+        ids,
+        req.user.tenant_id,
+      ]);
     }
 
     if (result.rowCount === 0) return res.status(404).json({ error: 'No students found.' });

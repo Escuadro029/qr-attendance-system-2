@@ -62,7 +62,7 @@ qr-attendance-system/
 cd backend
 cp .env.example .env        # then edit DATABASE_URL, JWT_SECRET
 npm install
-npm run seed                # creates tables + 9 categories + admin login
+npm run seed                # creates tables + a default tenant + 9 categories + admin login
 npm run dev                 # http://localhost:4000
 ```
 
@@ -134,6 +134,26 @@ create a new one.
 3. Visit the frontend URL, log in with the seeded admin account, and start
    registering students.
 
+### Upgrading an already-deployed database (multi-tenant migration)
+
+If you deployed before multi-tenancy was added, your database already has
+data but no `tenants`/`tenant_id` columns yet. Bring it up to date with a
+**one-time** run, in this order:
+
+```bash
+npm run migrate   # adds tenants + tenant_id, backfills existing rows into
+                   # one "Default School" tenant — safe to re-run, it tracks
+                   # what's already applied and skips it
+```
+
+Then, in the backend service's **Environment** tab, generate a new
+`JWT_SECRET` and save (this redeploys the service). Existing 12h login
+tokens don't carry a `tenant_id`, so rotating the secret forces everyone to
+log back in and get a token that does — otherwise tenant-scoped queries
+would silently return empty results for anyone still on an old token.
+Anyone already registering students/scanning can keep working right after
+they log back in.
+
 ---
 
 ## 5. What to customize before your event
@@ -159,3 +179,6 @@ create a new one.
 - Change the default seeded password immediately after first login (there's
   no self-service "change password" screen yet — update it directly via the
   `users` table or extend the API if you need one).
+- All students/categories/attendance/rankings/user accounts are scoped by
+  `tenant_id`, taken from the logged-in user's JWT — never from request
+  input — so one login can only ever see and modify its own tenant's data.

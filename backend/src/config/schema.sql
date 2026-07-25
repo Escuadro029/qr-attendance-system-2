@@ -5,9 +5,22 @@
 
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
+-- An organization using the platform (a school, a dental clinic, etc).
+-- `industry` picks which product experience the tenant's users see
+-- (e.g. 'education' -> QR attendance, 'booking' -> appointment booking).
+-- Validated against an app-level allow-list, not a DB CHECK, so adding a
+-- new industry later doesn't require a migration.
+CREATE TABLE IF NOT EXISTS tenants (
+  id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  name        VARCHAR(200) NOT NULL,
+  industry    VARCHAR(50) NOT NULL DEFAULT 'education',
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 -- Teachers / Admins who can log in and operate the scanner
 CREATE TABLE IF NOT EXISTS users (
   id            UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  tenant_id     UUID NOT NULL REFERENCES tenants(id),
   full_name     VARCHAR(150) NOT NULL,
   email         VARCHAR(150) UNIQUE NOT NULL,
   password_hash VARCHAR(255) NOT NULL,
@@ -15,16 +28,19 @@ CREATE TABLE IF NOT EXISTS users (
   created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- The 9 journalism press conference categories
+-- The journalism press conference categories (per tenant)
 CREATE TABLE IF NOT EXISTS categories (
-  id    SERIAL PRIMARY KEY,
-  name  VARCHAR(100) UNIQUE NOT NULL,
-  sort_order INT NOT NULL DEFAULT 0
+  id          SERIAL PRIMARY KEY,
+  tenant_id   UUID NOT NULL REFERENCES tenants(id),
+  name        VARCHAR(100) NOT NULL,
+  sort_order  INT NOT NULL DEFAULT 0,
+  UNIQUE (tenant_id, name)
 );
 
 -- Students registered for the press conference
 CREATE TABLE IF NOT EXISTS students (
   id            UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  tenant_id     UUID NOT NULL REFERENCES tenants(id),
   full_name     VARCHAR(150) NOT NULL,
   grade         VARCHAR(20)  NOT NULL,       -- e.g. "10"
   section       VARCHAR(50)  NOT NULL,       -- e.g. "Rizal"
@@ -39,6 +55,7 @@ CREATE TABLE IF NOT EXISTS students (
 -- One row per (student, category, date) scan
 CREATE TABLE IF NOT EXISTS attendance (
   id            UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  tenant_id     UUID NOT NULL REFERENCES tenants(id),
   student_id    UUID NOT NULL REFERENCES students(id) ON DELETE CASCADE,
   category_id   INT  NOT NULL REFERENCES categories(id) ON DELETE RESTRICT,
   recorded_by   UUID REFERENCES users(id),
@@ -52,6 +69,7 @@ CREATE TABLE IF NOT EXISTS attendance (
 -- certificate. Only one student can hold a given rank per category.
 CREATE TABLE IF NOT EXISTS category_rankings (
   id            UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  tenant_id     UUID NOT NULL REFERENCES tenants(id),
   category_id   INT  NOT NULL REFERENCES categories(id) ON DELETE CASCADE,
   student_id    UUID NOT NULL REFERENCES students(id) ON DELETE CASCADE,
   rank          INT  NOT NULL CHECK (rank IN (1, 2, 3)),
@@ -60,8 +78,42 @@ CREATE TABLE IF NOT EXISTS category_rankings (
   UNIQUE (category_id, rank)
 );
 
+-- Defense-in-depth: since tenant_id is denormalized onto attendance and
+-- category_rankings (rather than only derived via join) for simpler/faster
+-- scoped queries, this guards against a bug ever inserting a tenant_id that
+-- doesn't match the referenced student's/category's actual tenant.
+CREATE OR REPLACE FUNCTION enforce_tenant_consistency() RETURNS trigger AS $$
+BEGIN
+  IF NEW.student_id IS NOT NULL THEN
+    IF NEW.tenant_id <> (SELECT tenant_id FROM students WHERE id = NEW.student_id) THEN
+      RAISE EXCEPTION 'tenant_id mismatch: row tenant % does not match student tenant', NEW.tenant_id;
+    END IF;
+  END IF;
+  IF NEW.category_id IS NOT NULL THEN
+    IF NEW.tenant_id <> (SELECT tenant_id FROM categories WHERE id = NEW.category_id) THEN
+      RAISE EXCEPTION 'tenant_id mismatch: row tenant % does not match category tenant', NEW.tenant_id;
+    END IF;
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_attendance_tenant_consistency ON attendance;
+CREATE TRIGGER trg_attendance_tenant_consistency
+  BEFORE INSERT OR UPDATE ON attendance
+  FOR EACH ROW EXECUTE FUNCTION enforce_tenant_consistency();
+
+DROP TRIGGER IF EXISTS trg_rankings_tenant_consistency ON category_rankings;
+CREATE TRIGGER trg_rankings_tenant_consistency
+  BEFORE INSERT OR UPDATE ON category_rankings
+  FOR EACH ROW EXECUTE FUNCTION enforce_tenant_consistency();
 
 CREATE INDEX IF NOT EXISTS idx_attendance_student ON attendance(student_id);
 CREATE INDEX IF NOT EXISTS idx_attendance_category ON attendance(category_id);
 CREATE INDEX IF NOT EXISTS idx_students_qr_token ON students(qr_token);
 CREATE INDEX IF NOT EXISTS idx_rankings_category ON category_rankings(category_id);
+CREATE INDEX IF NOT EXISTS idx_users_tenant ON users(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_students_tenant ON students(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_categories_tenant ON categories(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_attendance_tenant ON attendance(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_rankings_tenant ON category_rankings(tenant_id);

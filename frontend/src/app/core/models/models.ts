@@ -24,6 +24,8 @@ export interface AuthUser {
   email: string;
   role: 'teacher' | 'admin';
   full_name: string;
+  tenant_id: string;
+  industry: string;
 }
 
 export interface LoginResponse {
