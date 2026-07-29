@@ -3,11 +3,14 @@ import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 import { ApiService } from '../../core/services/api.service';
 import { ProgressRow } from '../../core/models/models';
 import { DocumentModalComponent } from '../../shared/components/document-modal/document-modal.component';
+import { PaginationComponent } from '../../shared/components/pagination/pagination.component';
+
+const PAGE_SIZE = 10;
 
 @Component({
   selector: 'app-certificates',
   standalone: true,
-  imports: [DocumentModalComponent],
+  imports: [DocumentModalComponent, PaginationComponent],
   template: `
     <div class="container">
       <div class="head-row">
@@ -32,7 +35,7 @@ import { DocumentModalComponent } from '../../shared/components/document-modal/d
               </tr>
             </thead>
             <tbody>
-              @for (row of qualified(); track row.student_id) {
+              @for (row of paged(); track row.student_id) {
                 <tr>
                   <td data-label="Student">{{ row.full_name }}</td>
                   <td data-label="Grade &amp; Section">Grade {{ row.grade }} - {{ row.section }}</td>
@@ -49,6 +52,7 @@ import { DocumentModalComponent } from '../../shared/components/document-modal/d
               }
             </tbody>
           </table>
+          <app-pagination [page]="page()" [totalPages]="totalPages()" (pageChange)="page.set($event)"></app-pagination>
         }
       </div>
     </div>
@@ -76,6 +80,7 @@ export class CertificatesComponent implements OnInit {
   threshold = signal(6);
   loading = signal(true);
   downloadingId = signal<string | null>(null);
+  page = signal(1);
 
   modalOpen = signal(false);
   modalUrl = signal<string | SafeResourceUrl | null>(null);
@@ -94,6 +99,15 @@ export class CertificatesComponent implements OnInit {
       },
       complete: () => this.loading.set(false),
     });
+  }
+
+  totalPages(): number {
+    return Math.max(1, Math.ceil(this.qualified().length / PAGE_SIZE));
+  }
+
+  paged(): ProgressRow[] {
+    const start = (this.page() - 1) * PAGE_SIZE;
+    return this.qualified().slice(start, start + PAGE_SIZE);
   }
 
   download(row: ProgressRow) {

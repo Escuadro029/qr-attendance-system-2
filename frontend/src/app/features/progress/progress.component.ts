@@ -5,6 +5,9 @@ import { ApiService } from '../../core/services/api.service';
 import { ProgressRow, Student } from '../../core/models/models';
 import { DocumentModalComponent } from '../../shared/components/document-modal/document-modal.component';
 import { EditStudentModalComponent } from '../../shared/components/edit-student-modal/edit-student-modal.component';
+import { PaginationComponent } from '../../shared/components/pagination/pagination.component';
+
+const PAGE_SIZE = 10;
 
 const QUALIFYING_THRESHOLD = 6;
 
@@ -13,7 +16,7 @@ type ModalKind = 'image' | 'pdf' | null;
 @Component({
   selector: 'app-progress',
   standalone: true,
-  imports: [FormsModule, DocumentModalComponent, EditStudentModalComponent],
+  imports: [FormsModule, DocumentModalComponent, EditStudentModalComponent, PaginationComponent],
   template: `
     <div class="container">
       <h1 class="headline">Attendance Progress</h1>
@@ -22,8 +25,9 @@ type ModalKind = 'image' | 'pdf' | null;
       <div class="card">
         <div class="toolbar">
           <input
-            placeholder="Search by name or section…"
+            placeholder="Search by name, section, or student ID…"
             [(ngModel)]="search"
+            (ngModelChange)="page.set(1)"
             name="search"
           />
           <div class="bulk-actions">
@@ -44,6 +48,7 @@ type ModalKind = 'image' | 'pdf' | null;
             <thead>
               <tr>
                 <th style="width:30px;"><input type="checkbox" [checked]="allSelected()" (change)="toggleSelectAll($event)" /></th>
+                <th>Student ID</th>
                 <th>Student</th>
                 <th>Grade &amp; Section</th>
                 <th>Categories Completed</th>
@@ -52,9 +57,10 @@ type ModalKind = 'image' | 'pdf' | null;
               </tr>
             </thead>
             <tbody>
-              @for (row of filtered(); track row.student_id) {
+              @for (row of paged(); track row.student_id) {
                 <tr>
                   <td data-label="Select"><input type="checkbox" [checked]="selectedIds().has(row.student_id)" (change)="toggleSelect(row.student_id)" /></td>
+                  <td data-label="Student ID">{{ row.student_id_no || '—' }}</td>
                   <td data-label="Student">{{ row.full_name }}</td>
                   <td data-label="Grade &amp; Section">Grade {{ row.grade }} - {{ row.section }}</td>
                   <td data-label="Categories Completed">
@@ -85,10 +91,11 @@ type ModalKind = 'image' | 'pdf' | null;
                 </tr>
               }
               @empty {
-                <tr><td colspan="6" class="placeholder">No students found.</td></tr>
+                <tr><td colspan="7" class="placeholder">No students found.</td></tr>
               }
             </tbody>
           </table>
+          <app-pagination [page]="page()" [totalPages]="totalPages()" (pageChange)="page.set($event)"></app-pagination>
         }
       </div>
     </div>
@@ -141,6 +148,7 @@ export class ProgressComponent implements OnInit {
   rows = signal<ProgressRow[]>([]);
   loading = signal(true);
   search = '';
+  page = signal(1);
   selectedIds = signal<Set<string>>(new Set());
   bulkPrinting = signal(false);
 
@@ -172,8 +180,15 @@ export class ProgressComponent implements OnInit {
     this.loading.set(true);
     this.api.getProgress().subscribe({
       next: (rows) => this.rows.set(rows),
-      complete: () => this.loading.set(false),
+      complete: () => {
+        this.loading.set(false);
+        this.clampPage();
+      },
     });
+  }
+
+  private clampPage() {
+    if (this.page() > this.totalPages()) this.page.set(this.totalPages());
   }
 
   // Plain method (not a computed signal) so it re-evaluates on every change
@@ -182,8 +197,20 @@ export class ProgressComponent implements OnInit {
     const term = this.search.trim().toLowerCase();
     if (!term) return this.rows();
     return this.rows().filter(
-      (r) => r.full_name.toLowerCase().includes(term) || r.section.toLowerCase().includes(term)
+      (r) =>
+        r.full_name.toLowerCase().includes(term) ||
+        r.section.toLowerCase().includes(term) ||
+        (r.student_id_no ?? '').toLowerCase().includes(term)
     );
+  }
+
+  totalPages(): number {
+    return Math.max(1, Math.ceil(this.filtered().length / PAGE_SIZE));
+  }
+
+  paged(): ProgressRow[] {
+    const start = (this.page() - 1) * PAGE_SIZE;
+    return this.filtered().slice(start, start + PAGE_SIZE);
   }
 
   // ---- Selection / bulk printing ----

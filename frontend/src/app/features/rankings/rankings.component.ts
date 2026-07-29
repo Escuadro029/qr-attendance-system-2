@@ -4,13 +4,15 @@ import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 import { ApiService } from '../../core/services/api.service';
 import { Category, Ranking, Student } from '../../core/models/models';
 import { DocumentModalComponent } from '../../shared/components/document-modal/document-modal.component';
+import { PaginationComponent } from '../../shared/components/pagination/pagination.component';
 
 const RANK_LABELS: Record<number, string> = { 1: '1st Place', 2: '2nd Place', 3: '3rd Place' };
+const PAGE_SIZE = 10;
 
 @Component({
   selector: 'app-rankings',
   standalone: true,
-  imports: [FormsModule, DocumentModalComponent],
+  imports: [FormsModule, DocumentModalComponent, PaginationComponent],
   template: `
     <div class="container">
       <h1 class="headline">Category Rankings</h1>
@@ -69,7 +71,7 @@ const RANK_LABELS: Record<number, string> = { 1: '1st Place', 2: '2nd Place', 3:
               </tr>
             </thead>
             <tbody>
-              @for (r of rankings(); track r.id) {
+              @for (r of paged(); track r.id) {
                 <tr>
                   <td data-label="Category">{{ r.category_name }}</td>
                   <td data-label="Rank"><span class="badge" [class.badge-qualified]="r.rank===1" [class.badge-progress]="r.rank!==1">{{ rankLabel(r.rank) }}</span></td>
@@ -86,6 +88,7 @@ const RANK_LABELS: Record<number, string> = { 1: '1st Place', 2: '2nd Place', 3:
               }
             </tbody>
           </table>
+          <app-pagination [page]="page()" [totalPages]="totalPages()" (pageChange)="page.set($event)"></app-pagination>
         }
       </div>
     </div>
@@ -120,6 +123,7 @@ export class RankingsComponent implements OnInit {
   loading = signal(true);
   saving = signal(false);
   error = signal('');
+  page = signal(1);
 
   form: { category_id: number | null; student_id: string | null; rank: 1 | 2 | 3 } = {
     category_id: null,
@@ -147,8 +151,20 @@ export class RankingsComponent implements OnInit {
     this.loading.set(true);
     this.api.getRankings().subscribe({
       next: (r) => this.rankings.set(r),
-      complete: () => this.loading.set(false),
+      complete: () => {
+        this.loading.set(false);
+        if (this.page() > this.totalPages()) this.page.set(this.totalPages());
+      },
     });
+  }
+
+  totalPages(): number {
+    return Math.max(1, Math.ceil(this.rankings().length / PAGE_SIZE));
+  }
+
+  paged(): Ranking[] {
+    const start = (this.page() - 1) * PAGE_SIZE;
+    return this.rankings().slice(start, start + PAGE_SIZE);
   }
 
   rankLabel(rank: number): string {

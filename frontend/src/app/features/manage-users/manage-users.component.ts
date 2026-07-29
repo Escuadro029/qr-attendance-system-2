@@ -3,11 +3,14 @@ import { FormsModule } from '@angular/forms';
 import { ApiService } from '../../core/services/api.service';
 import { AuthService } from '../../core/services/auth.service';
 import { AppUser } from '../../core/models/models';
+import { PaginationComponent } from '../../shared/components/pagination/pagination.component';
+
+const PAGE_SIZE = 10;
 
 @Component({
   selector: 'app-manage-users',
   standalone: true,
-  imports: [FormsModule],
+  imports: [FormsModule, PaginationComponent],
   template: `
     <div class="container">
       <h1 class="headline">Manage Users</h1>
@@ -45,7 +48,7 @@ import { AppUser } from '../../core/models/models';
               <tr><th>Name</th><th>Email</th><th>Role</th><th></th></tr>
             </thead>
             <tbody>
-              @for (u of users(); track u.id) {
+              @for (u of paged(); track u.id) {
                 <tr>
                   <td data-label="Name">{{ u.full_name }}</td>
                   <td data-label="Email">{{ u.email }}</td>
@@ -62,6 +65,7 @@ import { AppUser } from '../../core/models/models';
               }
             </tbody>
           </table>
+          <app-pagination [page]="page()" [totalPages]="totalPages()" (pageChange)="page.set($event)"></app-pagination>
         </div>
       </div>
     </div>
@@ -82,6 +86,7 @@ export class ManageUsersComponent implements OnInit {
   error = signal('');
   success = signal('');
   users = signal<AppUser[]>([]);
+  page = signal(1);
 
   constructor(private api: ApiService, private auth: AuthService) {}
 
@@ -94,7 +99,19 @@ export class ManageUsersComponent implements OnInit {
   }
 
   load() {
-    this.api.getUsers().subscribe((u) => this.users.set(u));
+    this.api.getUsers().subscribe((u) => {
+      this.users.set(u);
+      if (this.page() > this.totalPages()) this.page.set(this.totalPages());
+    });
+  }
+
+  totalPages(): number {
+    return Math.max(1, Math.ceil(this.users().length / PAGE_SIZE));
+  }
+
+  paged(): AppUser[] {
+    const start = (this.page() - 1) * PAGE_SIZE;
+    return this.users().slice(start, start + PAGE_SIZE);
   }
 
   submit() {

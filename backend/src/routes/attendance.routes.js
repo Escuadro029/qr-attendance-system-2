@@ -67,7 +67,7 @@ router.get('/progress', requireAuth, async (req, res) => {
   try {
     const result = await pool.query(
       `
-      SELECT s.id AS student_id, s.full_name, s.grade, s.section,
+      SELECT s.id AS student_id, s.student_id_no, s.full_name, s.grade, s.section,
              COUNT(DISTINCT a.category_id)::int AS categories_completed,
              COALESCE(
                (
@@ -83,7 +83,7 @@ router.get('/progress', requireAuth, async (req, res) => {
       FROM students s
       LEFT JOIN attendance a ON a.student_id = s.id
       WHERE s.tenant_id = $1
-      GROUP BY s.id, s.full_name, s.grade, s.section, s.tenant_id
+      GROUP BY s.id, s.student_id_no, s.full_name, s.grade, s.section, s.tenant_id
       ORDER BY categories_completed DESC, s.full_name
     `,
       [req.user.tenant_id]

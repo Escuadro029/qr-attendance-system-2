@@ -63,6 +63,7 @@ export interface AttendanceRecord {
 
 export interface ProgressRow {
   student_id: string;
+  student_id_no?: string;
   full_name: string;
   grade: string;
   section: string;
