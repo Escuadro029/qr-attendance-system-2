@@ -46,6 +46,15 @@ export interface Student {
   created_at: string;
 }
 
+export interface GuestSpeaker {
+  id: string;
+  full_name: string;
+  position?: string;
+  organization?: string;
+  topic?: string;
+  created_at: string;
+}
+
 export interface Category {
   id: number;
   name: string;
@@ -69,6 +78,61 @@ export interface ProgressRow {
   section: string;
   categories_completed: number;
   completed_categories: string[];
+}
+
+export type CertificateElementType = 'text' | 'shape' | 'image';
+export type CertificateShapeKind = 'line' | 'rect' | 'ellipse';
+
+export interface CertificateElement {
+  id: string;
+  type: CertificateElementType;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  // text
+  text?: string;
+  fontSize?: number;
+  bold?: boolean;
+  italics?: boolean;
+  uppercase?: boolean;
+  color?: string;
+  align?: 'left' | 'center' | 'right' | 'justify';
+  fontFamily?: 'serif' | 'sans';
+  // shape
+  shape?: CertificateShapeKind;
+  lineColor?: string;
+  lineWidth?: number;
+  fillColor?: string;
+  cornerRadius?: number;
+  // image
+  source?: 'qr' | 'custom';
+  imageData?: string; // base64 data URI, for source: 'custom' (an uploaded logo)
+}
+
+export type CertificateOrientation = 'portrait' | 'landscape';
+export type CertificateKey = 'completion' | 'ranking' | 'guest_speaker';
+
+export interface CertificateTemplate {
+  template_key: CertificateKey;
+  elements: CertificateElement[];
+  orientation: CertificateOrientation;
+  updated_at?: string;
+}
+
+export interface CertificateCustomField {
+  name: string;
+  value: string;
+}
+
+export interface CertificateSettings {
+  office_line?: string;
+  signatory_name?: string;
+  signatory_title?: string;
+  date_range?: string;
+  venue?: string;
+  custom_fields?: CertificateCustomField[];
+  updated_at?: string;
 }
 
 export interface ScanResult {

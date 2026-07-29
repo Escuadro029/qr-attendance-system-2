@@ -2,7 +2,7 @@ import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
-import { Student, Category, ProgressRow, ScanResult, AttendanceRecord, AppUser, Ranking } from '../models/models';
+import { Student, Category, ProgressRow, ScanResult, AttendanceRecord, AppUser, Ranking, CertificateTemplate, CertificateSettings, CertificateKey, GuestSpeaker } from '../models/models';
 
 @Injectable({ providedIn: 'root' })
 export class ApiService {
@@ -111,5 +111,48 @@ export class ApiService {
 
   getRankingCertificateBlob(rankingId: string): Observable<Blob> {
     return this.http.get(`${this.base}/rankings/${rankingId}/certificate.pdf`, { responseType: 'blob' });
+  }
+
+  // Certificate templates (admin-only visual designer)
+  getCertificateTemplate(key: CertificateKey): Observable<CertificateTemplate> {
+    return this.http.get<CertificateTemplate>(`${this.base}/certificate-templates/${key}`);
+  }
+
+  getCertificateTemplateDefaults(key: CertificateKey): Observable<CertificateTemplate> {
+    return this.http.get<CertificateTemplate>(`${this.base}/certificate-templates/${key}/defaults`);
+  }
+
+  saveCertificateTemplate(key: CertificateKey, payload: Partial<CertificateTemplate>): Observable<CertificateTemplate> {
+    return this.http.put<CertificateTemplate>(`${this.base}/certificate-templates/${key}`, payload);
+  }
+
+  previewCertificateTemplateBlob(key: CertificateKey, draft: Partial<CertificateTemplate>): Observable<Blob> {
+    return this.http.post(`${this.base}/certificate-templates/${key}/preview.pdf`, draft, { responseType: 'blob' });
+  }
+
+  // Certificate settings (office/signatory/date/venue used by {{placeholders}})
+  getCertificateSettings(): Observable<CertificateSettings> {
+    return this.http.get<CertificateSettings>(`${this.base}/certificate-settings`);
+  }
+
+  saveCertificateSettings(payload: CertificateSettings): Observable<CertificateSettings> {
+    return this.http.put<CertificateSettings>(`${this.base}/certificate-settings`, payload);
+  }
+
+  // Guest speakers
+  registerGuestSpeaker(payload: Partial<GuestSpeaker>): Observable<GuestSpeaker> {
+    return this.http.post<GuestSpeaker>(`${this.base}/guest-speakers`, payload);
+  }
+
+  getGuestSpeakers(): Observable<GuestSpeaker[]> {
+    return this.http.get<GuestSpeaker[]>(`${this.base}/guest-speakers`);
+  }
+
+  deleteGuestSpeaker(id: string): Observable<{ message: string }> {
+    return this.http.delete<{ message: string }>(`${this.base}/guest-speakers/${id}`);
+  }
+
+  getGuestSpeakerCertificateBlob(id: string): Observable<Blob> {
+    return this.http.get(`${this.base}/guest-speakers/${id}/certificate.pdf`, { responseType: 'blob' });
   }
 }

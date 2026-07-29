@@ -6,6 +6,7 @@ import { ProgressRow, Student } from '../../core/models/models';
 import { DocumentModalComponent } from '../../shared/components/document-modal/document-modal.component';
 import { EditStudentModalComponent } from '../../shared/components/edit-student-modal/edit-student-modal.component';
 import { PaginationComponent } from '../../shared/components/pagination/pagination.component';
+import { generatePosterDataUrl, PosterFormat } from '../../core/utils/poster';
 
 const PAGE_SIZE = 10;
 
@@ -84,6 +85,7 @@ type ModalKind = 'image' | 'pdf' | null;
                     <button class="btn btn-outline btn-sm" (click)="editStudent(row)">Edit</button>
                     <button class="btn btn-outline btn-sm" (click)="viewQr(row)">QR</button>
                     <button class="btn btn-outline btn-sm" (click)="viewIdCard(row)">ID</button>
+                    <button class="btn btn-outline btn-sm" (click)="openPoster(row)">Poster</button>
                     @if (row.categories_completed >= QUALIFYING_THRESHOLD) {
                       <button class="btn btn-gold btn-sm" (click)="viewCertificate(row)">Certificate</button>
                     }
@@ -119,6 +121,30 @@ type ModalKind = 'image' | 'pdf' | null;
       (close)="closeEdit()"
       (save)="saveEdit($event)"
     ></app-edit-student-modal>
+
+    @if (posterOpen()) {
+      <div class="overlay" (click)="closePoster()">
+        <div class="modal card poster-modal" (click)="$event.stopPropagation()">
+          <div class="modal-head">
+            <h3 class="headline" style="font-size:1rem;">Social Media Poster — {{ posterRow()?.full_name }}</h3>
+            <button class="close-btn" (click)="closePoster()" aria-label="Close">✕</button>
+          </div>
+
+          <div class="poster-tabs">
+            <button class="btn btn-sm" [class.btn-gold]="posterFormat() === 'square'" [class.btn-outline]="posterFormat() !== 'square'" (click)="setPosterFormat('square')">Square Post</button>
+            <button class="btn btn-sm" [class.btn-gold]="posterFormat() === 'story'" [class.btn-outline]="posterFormat() !== 'story'" (click)="setPosterFormat('story')">Story</button>
+          </div>
+
+          <div class="poster-preview">
+            @if (posterDataUrl()) {
+              <img [src]="posterDataUrl()" alt="Poster preview" />
+            }
+          </div>
+
+          <button class="btn btn-gold" style="width:100%;" (click)="downloadPoster()">Download PNG</button>
+        </div>
+      </div>
+    }
   `,
   styles: [`
     .lede { color: #666; margin: 6px 0 24px; }
@@ -141,6 +167,19 @@ type ModalKind = 'image' | 'pdf' | null;
       white-space: nowrap;
     }
     .placeholder-inline { color: #999; font-size: 0.8rem; }
+
+    .overlay {
+      position: fixed; inset: 0; background: rgba(11,31,58,0.55);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 1000; padding: 20px;
+    }
+    .modal { width: 100%; max-height: 90vh; display: flex; flex-direction: column; gap: 14px; overflow-y: auto; }
+    .poster-modal { max-width: 420px; }
+    .modal-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+    .close-btn { background: none; border: none; font-size: 1.1rem; cursor: pointer; color: #888; flex-shrink: 0; }
+    .poster-tabs { display: flex; gap: 8px; }
+    .poster-preview { display: flex; align-items: center; justify-content: center; background: #f0f0f0; border-radius: 8px; padding: 10px; }
+    .poster-preview img { max-width: 100%; max-height: 60vh; border-radius: 4px; box-shadow: var(--shadow); }
   `],
 })
 export class ProgressComponent implements OnInit {
@@ -165,6 +204,12 @@ export class ProgressComponent implements OnInit {
   editTarget = signal<Student | null>(null);
   editSaving = signal(false);
   editError = signal('');
+
+  // Social media poster state
+  posterOpen = signal(false);
+  posterRow = signal<ProgressRow | null>(null);
+  posterFormat = signal<PosterFormat>('square');
+  posterDataUrl = signal<string | null>(null);
 
   private currentBlob: Blob | null = null;
   private currentFilename = '';
@@ -361,5 +406,51 @@ export class ProgressComponent implements OnInit {
       this.currentRawObjectUrl = null;
     }
     this.currentBlob = null;
+  }
+
+  // ---- Social media poster ----
+
+  openPoster(row: ProgressRow) {
+    this.posterRow.set(row);
+    this.posterFormat.set('square');
+    this.renderPoster();
+    this.posterOpen.set(true);
+  }
+
+  setPosterFormat(format: PosterFormat) {
+    this.posterFormat.set(format);
+    this.renderPoster();
+  }
+
+  private renderPoster() {
+    const row = this.posterRow();
+    if (!row) return;
+    this.posterDataUrl.set(
+      generatePosterDataUrl(
+        {
+          fullName: row.full_name,
+          grade: row.grade,
+          section: row.section,
+          categoriesCompleted: row.completed_categories,
+          threshold: this.QUALIFYING_THRESHOLD,
+        },
+        this.posterFormat()
+      )
+    );
+  }
+
+  downloadPoster() {
+    const url = this.posterDataUrl();
+    const row = this.posterRow();
+    if (!url || !row) return;
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `poster-${row.full_name.replace(/\s+/g, '_')}-${this.posterFormat()}.png`;
+    a.click();
+  }
+
+  closePoster() {
+    this.posterOpen.set(false);
+    this.posterDataUrl.set(null);
   }
 }

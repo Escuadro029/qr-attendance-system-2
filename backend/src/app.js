@@ -10,6 +10,9 @@ const categoriesRoutes = require('./routes/categories.routes');
 const attendanceRoutes = require('./routes/attendance.routes');
 const certificatesRoutes = require('./routes/certificates.routes');
 const rankingsRoutes = require('./routes/rankings.routes');
+const certificateTemplatesRoutes = require('./routes/certificateTemplates.routes');
+const certificateSettingsRoutes = require('./routes/certificateSettings.routes');
+const guestSpeakersRoutes = require('./routes/guestSpeakers.routes');
 
 const app = express();
 
@@ -23,7 +26,10 @@ const allowedOrigins = (process.env.CORS_ORIGIN || '*').split(',').map((s) => s.
 app.use(cors({
   origin: allowedOrigins.includes('*') ? true : allowedOrigins,
 }));
-app.use(express.json());
+// Default body-parser limit (100kb) is too small for a certificate template
+// carrying an uploaded logo image (stored as a base64 data URI directly in
+// the elements JSONB — see certificateTemplateStore.js).
+app.use(express.json({ limit: '2mb' }));
 
 // Login is the one unauthenticated, credential-checking endpoint, so it's
 // the one worth throttling against brute-force/credential-stuffing.
@@ -54,6 +60,9 @@ app.use('/api/categories', categoriesRoutes);
 app.use('/api/attendance', attendanceRoutes);
 app.use('/api/certificates', certificatesRoutes);
 app.use('/api/rankings', rankingsRoutes);
+app.use('/api/certificate-templates', certificateTemplatesRoutes);
+app.use('/api/certificate-settings', certificateSettingsRoutes);
+app.use('/api/guest-speakers', guestSpeakersRoutes);
 
 // 404
 app.use((req, res) => res.status(404).json({ error: 'Not found' }));

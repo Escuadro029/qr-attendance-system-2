@@ -1,11 +1,17 @@
-const PDFDocument = require('pdfkit');
-const { generateQrPngBuffer } = require('./qrGenerator');
+const pdfMake = require('pdfmake');
+const { generateQrDataUrl } = require('./qrGenerator');
+const { fonts } = require('./pdfFonts');
+const { DEFAULT_TEMPLATES } = require('./certificateTemplateDefaults');
+
+pdfMake.setFonts(fonts);
+const ALLOWED_FONT_PATHS = new Set(Object.values(fonts).flatMap((variants) => Object.values(variants)));
+// Only the exact bundled font file paths may be read from disk; no other
+// local files, and no remote URLs, are ever referenced from a docDefinition.
+pdfMake.setLocalAccessPolicy((path) => ALLOWED_FONT_PATHS.has(path));
+pdfMake.setUrlAccessPolicy(() => false);
 
 const NAVY = '#0B1F3A';
-const GOLD = '#C7A24A';
 const INK = '#1A1A1A';
-const RED = '#C23B3B';
-const GRAY = '#666666';
 
 const RANK_WORDS = { 1: 'FIRST', 2: 'SECOND', 3: 'THIRD' };
 
@@ -16,121 +22,129 @@ function generateControlNo(prefix = 'PRESSCONF') {
   return `${prefix}-${rand}-${rand2}-${year}`;
 }
 
-/**
- * Shared frame: seal header, decorative title, awardee block, achievement
- * paragraph (built from styled segments so key phrases can be bold),
- * "Given this..." line, signature block, QR code, and a footer row with
- * logo placeholders + certificate control number — mirrors a standard
- * DepEd Certificate of Recognition layout.
- *
- * `bodySegments` is an array of { text, bold? } rendered as one flowing,
- * centered paragraph so specific words (category name, rank, event name)
- * can be emphasized without breaking the sentence into separate blocks.
- */
-async function drawCertificateFrame(doc, {
-  title,
-  awardeeName,
-  schoolLine,
-  bodySegments,
-  givenLine,
-  signatoryName,
-  signatoryTitle,
-  controlNo,
-  qrToken,
-  officeLine,
-}) {
-  const { width, height } = doc.page;
-  const centerX = width / 2;
+// Plain pdfmake text/stack nodes ignore a standalone `width` property (it's
+// only honored on `image` nodes) — `alignment: 'center'` would otherwise
+// center across the full remaining page width instead of a narrower box.
+// Wrapping in a single fixed-width `columns` entry gives a real constrained
+// box to center/justify within, matching a `.text(str, x, y, {width})` call.
+function boxed({ x, y, width, node }) {
+  return { columns: [{ width, ...node }], absolutePosition: { x, y } };
+}
 
-  // Outer card background + thin rule under header (matches the sample's
-  // plain white card with a gray divider under the DepEd header block)
-  doc.rect(0, 0, width, height).fill('#FFFFFF');
+function substitutePlaceholders(text, mergeData) {
+  return (text || '').replace(/\{\{(\w+)\}\}/g, (_, key) => (mergeData[key] ?? ''));
+}
 
-  // Seal placeholder (school/division pastes their real seal image here)
-  doc.circle(centerX, 55, 26).lineWidth(1.2).strokeColor(NAVY).stroke();
-  doc.fontSize(6).fillColor(NAVY).font('Helvetica-Bold')
-    .text('OFFICIAL\nSEAL', centerX - 26, 47, { width: 52, align: 'center' });
+function slugify(name) {
+  return String(name).toLowerCase().trim().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'field';
+}
 
-  doc.fontSize(10).fillColor(INK).font('Times-Roman')
-    .text('Republic of the Philippines', 0, 90, { align: 'center' });
-  doc.fontSize(15).fillColor(INK).font('Times-BoldItalic')
-    .text('Department of Education', 0, 103, { align: 'center' });
-  if (officeLine) {
-    doc.fontSize(9).fillColor(INK).font('Helvetica-Bold')
-      .text(officeLine.toUpperCase(), 0, 124, { align: 'center' });
+// Custom settings fields (e.g. "Event Name" -> {{event_name}}) are merged in
+// last so they can never shadow a system field like {{full_name}}.
+function applyCustomFields(mergeData, customFields) {
+  for (const { name, value } of customFields || []) {
+    const key = slugify(name);
+    if (!(key in mergeData)) mergeData[key] = value;
   }
+  return mergeData;
+}
 
-  doc.moveTo(60, 140).lineTo(width - 60, 140).lineWidth(1).strokeColor('#999999').stroke();
+function fontNameFor(fontFamily) {
+  return fontFamily === 'serif' ? 'Tinos' : 'Roboto';
+}
 
-  // Title
-  doc.fontSize(30).fillColor('#111111').font('Times-BoldItalic')
-    .text(title, 0, 158, { align: 'center' });
+// Splits "plain **bold** plain" into pdfmake inline text runs — bold
+// segments are accent-colored (navy) regardless of the element's own color,
+// matching the original design where key phrases (a category name, a rank)
+// are emphasized within an otherwise plain sentence.
+function textRuns(text, el) {
+  const font = fontNameFor(el.fontFamily);
+  const color = el.color || INK;
+  return text
+    .split(/\*\*(.+?)\*\*/g)
+    .filter((part) => part.length > 0)
+    .map((part, i) => ({
+      text: part,
+      font,
+      bold: i % 2 === 1 ? true : !!el.bold,
+      italics: !!el.italics,
+      color: i % 2 === 1 ? NAVY : color,
+    }));
+}
 
-  doc.fontSize(11).fillColor(INK).font('Helvetica')
-    .text('is awarded to', 0, 200, { align: 'center' });
-
-  // Awardee name, underlined
-  doc.fontSize(22).fillColor(NAVY).font('Times-Bold')
-    .text(awardeeName, 0, 218, { align: 'center' });
-  const nameWidth = doc.widthOfString(awardeeName, { font: 'Times-Bold', fontSize: 22 });
-  doc.moveTo(centerX - nameWidth / 2 - 6, 246).lineTo(centerX + nameWidth / 2 + 6, 246)
-    .lineWidth(0.75).strokeColor(INK).stroke();
-
-  if (schoolLine) {
-    doc.fontSize(10.5).fillColor(INK).font('Helvetica-Oblique')
-      .text(schoolLine, 80, 254, { align: 'center', width: width - 160 });
-  }
-
-  // Achievement paragraph, built from mixed bold/regular segments on one
-  // flowing block. NOTE: PDFKit's "continued" text + align:'center' is
-  // buggy (it centers each internal fragment separately, scrambling word
-  // order) — so this paragraph is justified/left-aligned within an indented
-  // block instead, which flows correctly with mixed bold/regular runs.
-  let bodyY = 286;
-  const bodyWidth = width - 180;
-  const bodyX = 90;
-  doc.fontSize(11.5);
-  doc.x = bodyX;
-  doc.y = bodyY;
-  bodySegments.forEach((seg, i) => {
-    doc.font(seg.bold ? 'Helvetica-Bold' : 'Helvetica')
-      .fillColor(seg.bold ? NAVY : INK)
-      .text(seg.text, { continued: i < bodySegments.length - 1, width: bodyWidth, align: 'justify' });
+function renderTextElement(el, mergeData) {
+  let text = substitutePlaceholders(el.text, mergeData);
+  if (el.uppercase) text = text.toUpperCase();
+  return boxed({
+    x: el.x,
+    y: el.y,
+    width: el.width,
+    node: { text: textRuns(text, el), fontSize: el.fontSize || 11, alignment: el.align || 'left' },
   });
+}
 
-  // "Given this..." line
-  doc.fontSize(10.5).fillColor(INK).font('Helvetica')
-    .text(givenLine, 80, doc.y + 16, { align: 'center', width: bodyWidth });
-
-  // Signature block
-  const sigY = height - 150;
-  doc.moveTo(centerX - 140, sigY).lineTo(centerX + 140, sigY).lineWidth(0.75).strokeColor(INK).stroke();
-  doc.fontSize(10.5).fillColor(INK).font('Helvetica-Bold')
-    .text(signatoryName.toUpperCase(), 0, sigY + 4, { align: 'center' });
-  doc.fontSize(9).fillColor(GRAY).font('Helvetica-Oblique')
-    .text(signatoryTitle, 0, sigY + 18, { align: 'center' });
-
-  // QR code, bottom right — encodes the control number for verification
-  const qrBuffer = await generateQrPngBuffer(qrToken || controlNo);
-  const qrSize = 62;
-  doc.image(qrBuffer, width - 100, height - 110, { width: qrSize, height: qrSize });
-
-  // Footer: logo placeholders + control number box
-  const footerY = height - 40;
-  doc.moveTo(30, footerY - 8).lineTo(width - 30, footerY - 8).lineWidth(0.5).strokeColor('#cccccc').stroke();
-
-  const logoSlots = 4;
-  for (let i = 0; i < logoSlots; i++) {
-    const lx = 34 + i * 34;
-    doc.roundedRect(lx, footerY - 2, 26, 26, 3).lineWidth(0.75).strokeColor('#bbbbbb').stroke();
-    doc.fontSize(5).fillColor('#999999').text('LOGO', lx, footerY + 9, { width: 26, align: 'center' });
+// All shapes share one bounding box ({x,y,width,height}) so the frontend's
+// drag/resize editor can treat every element uniformly; each shape kind
+// converts that box into the coordinates pdfmake's canvas vectors expect.
+function renderShapeElement(el) {
+  const vector = { lineColor: el.lineColor, lineWidth: el.lineWidth, color: el.fillColor };
+  if (el.shape === 'line') {
+    Object.assign(vector, { type: 'line', x1: el.x, y1: el.y, x2: el.x + el.width, y2: el.y + el.height });
+  } else if (el.shape === 'rect') {
+    Object.assign(vector, { type: 'rect', x: el.x, y: el.y, w: el.width, h: el.height, r: el.cornerRadius || undefined });
+  } else if (el.shape === 'ellipse') {
+    Object.assign(vector, { type: 'ellipse', x: el.x + el.width / 2, y: el.y + el.height / 2, r1: el.width / 2, r2: el.height / 2 });
+  } else {
+    return null;
   }
+  return { canvas: [vector], absolutePosition: { x: 0, y: 0 } };
+}
 
-  doc.rect(width - 210, footerY, 180, 22).fill(RED);
-  doc.fontSize(7).fillColor('#FFFFFF').font('Helvetica-Bold')
-    .text('CERTIFICATE CONTROL NO.', width - 205, footerY + 4, { width: 170, align: 'center' });
-  doc.fontSize(8).fillColor(INK).font('Helvetica')
-    .text(controlNo, width - 205, footerY + 26, { width: 170, align: 'center' });
+function renderImageElement(el, qrDataUrl) {
+  // Uploaded logos are stored as a data URI directly on the element (in the
+  // same certificate_templates.elements JSONB, no separate file storage) —
+  // simplest option given Render's web service filesystem isn't persistent.
+  const dataUrl = el.source === 'qr' ? qrDataUrl : el.source === 'custom' ? el.imageData : null;
+  if (!dataUrl) return null;
+  return { image: dataUrl, width: el.width, height: el.height, absolutePosition: { x: el.x, y: el.y } };
+}
+
+/**
+ * Builds a pdfmake docDefinition from a freely-positioned elements array —
+ * each element is independently drawn at its own absolute box, so the
+ * layout is entirely data-driven (edited via the certificate template
+ * designer) rather than hardcoded here.
+ */
+async function buildCertificateDocDefinition({ elements, mergeData, qrToken, controlNo, orientation }) {
+  const list = elements || [];
+  // Only generate the QR image when something in the layout actually needs
+  // it — most certificates no longer include one.
+  const needsQr = list.some((el) => el.type === 'image' && el.source === 'qr');
+  const qrDataUrl = needsQr ? await generateQrDataUrl(qrToken || controlNo) : null;
+
+  const content = list
+    .map((el) => {
+      if (el.type === 'text') return renderTextElement(el, mergeData);
+      if (el.type === 'shape') return renderShapeElement(el);
+      if (el.type === 'image') return renderImageElement(el, qrDataUrl);
+      return null;
+    })
+    .filter(Boolean);
+
+  return {
+    pageSize: 'LETTER',
+    pageOrientation: orientation === 'landscape' ? 'landscape' : 'portrait',
+    pageMargins: 0,
+    defaultStyle: { font: 'Roboto', fontSize: 11 },
+    content,
+  };
+}
+
+async function streamPdf(docDefinition, res) {
+  const pdfDoc = pdfMake.createPdf(docDefinition);
+  const stream = await pdfDoc.getStream();
+  stream.pipe(res);
+  stream.end();
 }
 
 /**
@@ -139,31 +153,35 @@ async function drawCertificateFrame(doc, {
  */
 async function renderCertificatePdf({
   student, categoriesCompleted, schoolName, divisionName, dateRange,
-  officeLine, venue, signatoryName, signatoryTitle, controlNo,
+  officeLine, venue, signatoryName, signatoryTitle, controlNo, template, customFields,
 }, res) {
-  const doc = new PDFDocument({ size: 'LETTER', margin: 0 });
-  doc.pipe(res);
+  const finalControlNo = controlNo || generateControlNo('PRESSCONF-COMP');
+  const mergeData = applyCustomFields({
+    full_name: student.full_name,
+    grade: student.grade,
+    section: student.section,
+    school_name: schoolName || 'Your School Name',
+    categories_completed: categoriesCompleted,
+    date_range: dateRange || 'on the scheduled Fridays',
+    venue: venue || '',
+    venue_clause: venue ? ` at ${venue}` : '',
+    venue_or_school: venue || schoolName || 'the school campus',
+    office_line: officeLine || divisionName || 'Schools Division Office',
+    signatory_name: signatoryName || 'Juan D. Santos',
+    signatory_title: signatoryTitle || 'School Principal / Head Teacher',
+    control_no: finalControlNo,
+  }, customFields);
 
-  await drawCertificateFrame(doc, {
-    title: 'Certificate of Recognition',
-    awardeeName: student.full_name,
-    schoolLine: `Grade ${student.grade} - ${student.section}, ${schoolName || 'Your School Name'}`,
-    officeLine: officeLine || divisionName || 'Schools Division Office',
-    bodySegments: [
-      { text: 'For having successfully completed ' },
-      { text: `${categoriesCompleted} journalism categories `, bold: true },
-      { text: 'during the ' },
-      { text: 'School Press Conference ', bold: true },
-      { text: `held ${dateRange || 'on the scheduled Fridays'}${venue ? ' at ' + venue : ''}, demonstrating dedication, versatility, and excellence in campus journalism.` },
-    ],
-    givenLine: `Given this day at ${venue || (schoolName || 'the school campus')}.`,
-    signatoryName: signatoryName || 'Juan D. Santos',
-    signatoryTitle: signatoryTitle || 'School Principal / Head Teacher',
-    controlNo: controlNo || generateControlNo('PRESSCONF-COMP'),
+  const tpl = template || DEFAULT_TEMPLATES.completion;
+  const docDefinition = await buildCertificateDocDefinition({
+    elements: tpl.elements,
+    orientation: tpl.orientation,
+    mergeData,
     qrToken: student.qr_token,
+    controlNo: finalControlNo,
   });
 
-  doc.end();
+  await streamPdf(docDefinition, res);
 }
 
 /**
@@ -171,35 +189,82 @@ async function renderCertificatePdf({
  */
 async function renderRankingCertificatePdf({
   student, categoryName, rank, eventName, dateRange, venue,
-  schoolName, officeLine, signatoryName, signatoryTitle, controlNo,
+  schoolName, officeLine, signatoryName, signatoryTitle, controlNo, template, customFields,
 }, res) {
-  const doc = new PDFDocument({ size: 'LETTER', margin: 0 });
-  doc.pipe(res);
+  const finalControlNo = controlNo || generateControlNo('PRESSCONF-RANK');
+  const mergeData = applyCustomFields({
+    full_name: student.full_name,
+    grade: student.grade,
+    section: student.section,
+    school_name: schoolName || 'Your School Name',
+    category_name: categoryName,
+    rank_word: RANK_WORDS[rank] || 'OUTSTANDING',
+    event_name: eventName || 'School Press Conference',
+    date_range: dateRange || 'on the scheduled date',
+    venue: venue || '',
+    venue_clause: venue ? ` at ${venue}` : '',
+    venue_or_school: venue || schoolName || 'the school campus',
+    office_line: officeLine || 'Schools Division Office',
+    signatory_name: signatoryName || 'Juan D. Santos',
+    signatory_title: signatoryTitle || 'School Principal / Head Teacher',
+    control_no: finalControlNo,
+  }, customFields);
 
-  const rankWord = RANK_WORDS[rank] || 'OUTSTANDING';
-
-  await drawCertificateFrame(doc, {
-    title: 'Certificate of Recognition',
-    awardeeName: student.full_name,
-    schoolLine: `Grade ${student.grade} - ${student.section}, ${schoolName || 'Your School Name'}`,
-    officeLine: officeLine || 'Schools Division Office',
-    bodySegments: [
-      { text: 'For having achieved as ' },
-      { text: `${rankWord} `, bold: true },
-      { text: 'in the ' },
-      { text: `${categoryName} `, bold: true },
-      { text: 'during the ' },
-      { text: `${eventName || 'School Press Conference'} `, bold: true },
-      { text: `held ${dateRange || 'on the scheduled date'}${venue ? ' at ' + venue : ''}.` },
-    ],
-    givenLine: `Given this day at ${venue || (schoolName || 'the school campus')}.`,
-    signatoryName: signatoryName || 'Juan D. Santos',
-    signatoryTitle: signatoryTitle || 'School Principal / Head Teacher',
-    controlNo: controlNo || generateControlNo('PRESSCONF-RANK'),
+  const tpl = template || DEFAULT_TEMPLATES.ranking;
+  const docDefinition = await buildCertificateDocDefinition({
+    elements: tpl.elements,
+    orientation: tpl.orientation,
+    mergeData,
     qrToken: student.qr_token,
+    controlNo: finalControlNo,
   });
 
-  doc.end();
+  await streamPdf(docDefinition, res);
 }
 
-module.exports = { renderCertificatePdf, renderRankingCertificatePdf, generateControlNo, RANK_WORDS };
+/**
+ * Certificate of Recognition — guest speakers invited to the press
+ * conference (no grade/section/QR; the subtitle line shows their
+ * position/organization instead via the composed {{position_line}} field).
+ */
+async function renderGuestSpeakerCertificatePdf({
+  speaker, eventName, dateRange, venue, officeLine, signatoryName, signatoryTitle, controlNo, template, customFields,
+}, res) {
+  const finalControlNo = controlNo || generateControlNo('PRESSCONF-GUEST');
+  const mergeData = applyCustomFields({
+    full_name: speaker.full_name,
+    position: speaker.position || '',
+    organization: speaker.organization || '',
+    position_line: [speaker.position, speaker.organization].filter(Boolean).join(', '),
+    topic: speaker.topic || 'campus journalism',
+    event_name: eventName || 'School Press Conference',
+    date_range: dateRange || 'on the scheduled date',
+    venue: venue || '',
+    venue_clause: venue ? ` at ${venue}` : '',
+    venue_or_school: venue || 'the school campus',
+    office_line: officeLine || 'Schools Division Office',
+    signatory_name: signatoryName || 'Juan D. Santos',
+    signatory_title: signatoryTitle || 'School Principal / Head Teacher',
+    control_no: finalControlNo,
+  }, customFields);
+
+  const tpl = template || DEFAULT_TEMPLATES.guest_speaker;
+  const docDefinition = await buildCertificateDocDefinition({
+    elements: tpl.elements,
+    orientation: tpl.orientation,
+    mergeData,
+    controlNo: finalControlNo,
+  });
+
+  await streamPdf(docDefinition, res);
+}
+
+module.exports = {
+  renderCertificatePdf,
+  renderRankingCertificatePdf,
+  renderGuestSpeakerCertificatePdf,
+  generateControlNo,
+  RANK_WORDS,
+  buildCertificateDocDefinition,
+  streamPdf,
+};

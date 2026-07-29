@@ -3,6 +3,8 @@ const pool = require('../config/db');
 const { requireAuth } = require('../middleware/auth.middleware');
 const { renderCertificatePdf } = require('../utils/certificateGenerator');
 const { safeFilename } = require('../utils/safeFilename');
+const { getTemplate } = require('../utils/certificateTemplateStore');
+const { getSettings } = require('../utils/certificateSettingsStore');
 
 const router = express.Router();
 const QUALIFYING_THRESHOLD = 6;
@@ -31,15 +33,20 @@ router.get('/qualified', requireAuth, async (req, res) => {
 // GET /api/certificates/sample.pdf -> preview certificate with placeholder data
 // (must be registered before /:studentId.pdf, which would otherwise treat
 // "sample" as a studentId and shadow this route)
-router.get('/sample.pdf', requireAuth, (req, res) => {
+router.get('/sample.pdf', requireAuth, async (req, res) => {
+  const settings = await getSettings(req.user.tenant_id);
   res.set('Content-Type', 'application/pdf');
   res.set('Content-Disposition', 'inline; filename="certificate-sample.pdf"');
   renderCertificatePdf({
     student: { full_name: 'Juan Dela Cruz', grade: '10', section: 'Rizal' },
     categoriesCompleted: 8,
     schoolName: req.query.school || 'Your School Name',
-    divisionName: req.query.division || 'Schools Division Office',
-    dateRange: req.query.dates || 'August 1, 8, and 15, 2026',
+    divisionName: req.query.division || settings.office_line || 'Schools Division Office',
+    dateRange: req.query.dates || settings.date_range || 'August 1, 8, and 15, 2026',
+    venue: settings.venue,
+    signatoryName: settings.signatory_name,
+    signatoryTitle: settings.signatory_title,
+    customFields: settings.custom_fields,
   }, res);
 });
 
@@ -65,14 +72,24 @@ router.get('/:studentId.pdf', requireAuth, async (req, res) => {
       });
     }
 
+    const [template, settings] = await Promise.all([
+      getTemplate(req.user.tenant_id, 'completion'),
+      getSettings(req.user.tenant_id),
+    ]);
+
     res.set('Content-Type', 'application/pdf');
     res.set('Content-Disposition', `inline; filename="certificate-${safeFilename(student.full_name)}.pdf"`);
     renderCertificatePdf({
       student,
       categoriesCompleted,
       schoolName: student.school_name,
-      divisionName: req.query.division,
-      dateRange: req.query.dates,
+      divisionName: req.query.division || settings.office_line,
+      dateRange: req.query.dates || settings.date_range,
+      venue: settings.venue,
+      signatoryName: settings.signatory_name,
+      signatoryTitle: settings.signatory_title,
+      customFields: settings.custom_fields,
+      template,
     }, res);
   } catch (err) {
     console.error(err);

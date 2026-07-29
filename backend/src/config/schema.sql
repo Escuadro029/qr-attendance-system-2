@@ -78,6 +78,51 @@ CREATE TABLE IF NOT EXISTS category_rankings (
   UNIQUE (category_id, rank)
 );
 
+-- Editable, freely-positioned layout for the two certificate types
+-- ("completion" and "ranking"). `elements` is an ordered array of
+-- {id, type: 'text'|'shape'|'image', x, y, width, height, ...style} boxes —
+-- array order is paint order. A missing row for a given tenant/key falls
+-- back to hardcoded defaults in certificateTemplateDefaults.js, so existing
+-- tenants keep working unchanged until an admin explicitly saves a
+-- customization.
+CREATE TABLE IF NOT EXISTS certificate_templates (
+  id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  tenant_id       UUID NOT NULL REFERENCES tenants(id),
+  template_key    VARCHAR(20) NOT NULL, -- 'completion' | 'ranking'
+  elements        JSONB NOT NULL DEFAULT '[]',
+  orientation     VARCHAR(20) NOT NULL DEFAULT 'portrait', -- 'portrait' | 'landscape'
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (tenant_id, template_key)
+);
+
+-- A single settings row per tenant holding the certificate "constants" that
+-- rarely change (office/division name, signatory, current event date range
+-- and venue) — used as merge-data for {{office_line}}, {{signatory_name}},
+-- {{signatory_title}}, {{date_range}}, {{venue_or_school}} wherever a
+-- template references them.
+CREATE TABLE IF NOT EXISTS certificate_settings (
+  tenant_id       UUID PRIMARY KEY REFERENCES tenants(id),
+  office_line     VARCHAR(200),
+  signatory_name  VARCHAR(150),
+  signatory_title VARCHAR(150),
+  date_range      VARCHAR(200),
+  venue           VARCHAR(200),
+  custom_fields   JSONB NOT NULL DEFAULT '[]', -- [{name, value}, ...] -> {{slugified_name}}
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Guest speakers invited to the press conference, registered the same way
+-- students are and issued their own Certificate of Recognition.
+CREATE TABLE IF NOT EXISTS guest_speakers (
+  id           UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  tenant_id    UUID NOT NULL REFERENCES tenants(id),
+  full_name    VARCHAR(150) NOT NULL,
+  position     VARCHAR(150),
+  organization VARCHAR(200),
+  topic        VARCHAR(200),
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 -- Defense-in-depth: since tenant_id is denormalized onto attendance and
 -- category_rankings (rather than only derived via join) for simpler/faster
 -- scoped queries, this guards against a bug ever inserting a tenant_id that
@@ -117,3 +162,5 @@ CREATE INDEX IF NOT EXISTS idx_students_tenant ON students(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_categories_tenant ON categories(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_attendance_tenant ON attendance(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_rankings_tenant ON category_rankings(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_certificate_templates_tenant ON certificate_templates(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_guest_speakers_tenant ON guest_speakers(tenant_id);

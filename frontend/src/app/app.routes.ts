@@ -45,5 +45,17 @@ export const routes: Routes = [
     canActivate: [authGuard, adminGuard],
     loadComponent: () => import('./features/manage-users/manage-users.component').then((m) => m.ManageUsersComponent),
   },
+  {
+    path: 'certificate-template',
+    canActivate: [authGuard, adminGuard],
+    loadComponent: () =>
+      import('./features/certificate-template/certificate-template.component').then((m) => m.CertificateTemplateComponent),
+  },
+  {
+    path: 'certificate-settings',
+    canActivate: [authGuard, adminGuard],
+    loadComponent: () =>
+      import('./features/certificate-settings/certificate-settings.component').then((m) => m.CertificateSettingsComponent),
+  },
   { path: '**', redirectTo: 'login' },
 ];

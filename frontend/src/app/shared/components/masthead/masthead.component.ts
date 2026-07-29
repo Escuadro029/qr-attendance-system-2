@@ -34,6 +34,8 @@ import { AuthService } from '../../../core/services/auth.service';
           <a routerLink="/rankings" routerLinkActive="active">Rankings</a>
           @if (auth.currentUser()?.role === 'admin') {
             <a routerLink="/users" routerLinkActive="active">Manage Users</a>
+            <a routerLink="/certificate-template" routerLinkActive="active">Certificate Template</a>
+            <a routerLink="/certificate-settings" routerLinkActive="active">Certificate Settings</a>
           }
         </nav>
       }

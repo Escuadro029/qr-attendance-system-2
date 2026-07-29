@@ -3,6 +3,8 @@ const pool = require('../config/db');
 const { requireAuth } = require('../middleware/auth.middleware');
 const { renderRankingCertificatePdf, generateControlNo } = require('../utils/certificateGenerator');
 const { safeFilename } = require('../utils/safeFilename');
+const { getTemplate } = require('../utils/certificateTemplateStore');
+const { getSettings } = require('../utils/certificateSettingsStore');
 
 const router = express.Router();
 
@@ -108,6 +110,11 @@ router.get('/:id/certificate.pdf', requireAuth, async (req, res) => {
     if (result.rowCount === 0) return res.status(404).json({ error: 'Ranking not found' });
     const row = result.rows[0];
 
+    const [template, settings] = await Promise.all([
+      getTemplate(req.user.tenant_id, 'ranking'),
+      getSettings(req.user.tenant_id),
+    ]);
+
     res.set('Content-Type', 'application/pdf');
     res.set('Content-Disposition', `inline; filename="ranking-certificate-${safeFilename(row.full_name)}.pdf"`);
 
@@ -116,13 +123,15 @@ router.get('/:id/certificate.pdf', requireAuth, async (req, res) => {
       categoryName: row.category_name,
       rank: row.rank,
       eventName: req.query.event || 'School Press Conference',
-      dateRange: req.query.dates,
-      venue: req.query.venue,
+      dateRange: req.query.dates || settings.date_range,
+      venue: req.query.venue || settings.venue,
       schoolName: row.school_name,
-      officeLine: req.query.division,
-      signatoryName: req.query.signatory,
-      signatoryTitle: req.query.signatoryTitle,
+      officeLine: req.query.division || settings.office_line,
+      signatoryName: req.query.signatory || settings.signatory_name,
+      signatoryTitle: req.query.signatoryTitle || settings.signatory_title,
       controlNo: row.control_no,
+      customFields: settings.custom_fields,
+      template,
     }, res);
   } catch (err) {
     console.error(err);
