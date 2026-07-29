@@ -1,6 +1,31 @@
 import {
   FormsModule
-} from "./chunk-UIDZIMWI.js";
+} from "./chunk-LKILAON7.js";
+import {
+  CommonModule
+} from "./chunk-4VS2DJ65.js";
+import "./chunk-CH3JLG44.js";
+import {
+  ChangeDetectionStrategy,
+  Component,
+  EventEmitter,
+  Input,
+  NgModule,
+  Output,
+  ViewChild,
+  setClassMetadata,
+  ɵɵdefineComponent,
+  ɵɵdefineInjector,
+  ɵɵdefineNgModule,
+  ɵɵelementEnd,
+  ɵɵelementStart,
+  ɵɵloadQuery,
+  ɵɵproperty,
+  ɵɵqueryRefresh,
+  ɵɵstyleProp,
+  ɵɵtext,
+  ɵɵviewQuery
+} from "./chunk-3PPDZDKI.js";
 import {
   ArgumentException_default,
   AztecReader_default,
@@ -24,31 +49,6 @@ import {
   PDF417Reader_default,
   QRCodeReader_default
 } from "./chunk-M34QWGN3.js";
-import {
-  CommonModule
-} from "./chunk-6JRCST6K.js";
-import "./chunk-QDKZID5T.js";
-import {
-  ChangeDetectionStrategy,
-  Component,
-  EventEmitter,
-  Input,
-  NgModule,
-  Output,
-  ViewChild,
-  setClassMetadata,
-  ɵɵdefineComponent,
-  ɵɵdefineInjector,
-  ɵɵdefineNgModule,
-  ɵɵelementEnd,
-  ɵɵelementStart,
-  ɵɵloadQuery,
-  ɵɵproperty,
-  ɵɵqueryRefresh,
-  ɵɵstyleProp,
-  ɵɵtext,
-  ɵɵviewQuery
-} from "./chunk-3PPDZDKI.js";
 import {
   BehaviorSubject
 } from "./chunk-RSS3ODKE.js";
