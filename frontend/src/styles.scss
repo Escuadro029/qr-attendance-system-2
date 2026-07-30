@@ -1,23 +1,25 @@
 // ==========================================================================
-// QR Attendance — School Press Conference theme
-// Palette: deep navy (authority/DepEd) + press-gold (award/masthead accent)
+// Press-files theme
+// Palette: plain, professional — neutral white/gray surfaces with a single
+// standard mid-tone blue reserved for brand/accent (buttons, headlines,
+// links, active states), not tinted across every surface.
 // Typography: serif for headlines (newspaper masthead feel),
 //             clean sans for UI (modern & minimalist for daily use)
 // ==========================================================================
 
 :root {
-  --navy: #0b1f3a;
-  --navy-light: #16305a;
-  --gold: #c7a24a;
-  --gold-light: #e8d7a8;
-  --ink: #1a1a1a;
-  --paper: #f7f5f0;
+  --navy: #2b6cb0;
+  --navy-light: #4a85c7;
+  --gold: #d6e4f0;
+  --gold-light: #e7eef4;
+  --ink: #2d3748;
+  --paper: #f7f8fa;
   --paper-card: #ffffff;
-  --border: #e2ddd1;
+  --border: #d2e1f0;
   --success: #1f8a4c;
   --danger: #c23b3b;
   --radius: 10px;
-  --shadow: 0 2px 10px rgba(11, 31, 58, 0.08);
+  --shadow: 0 2px 10px rgba(43, 108, 176, 0.10);
   --font-headline: 'Georgia', 'Times New Roman', serif;
   --font-ui: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
 }
@@ -204,8 +206,8 @@ th {
 }
 
 .badge-progress {
-  background: rgba(199, 162, 74, 0.15);
-  color: #8a6d1f;
+  background: rgba(43, 108, 176, 0.12);
+  color: var(--navy);
 }
 
 .container {

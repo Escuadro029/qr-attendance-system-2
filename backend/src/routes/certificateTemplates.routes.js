@@ -1,6 +1,6 @@
 const express = require('express');
 const { requireAuth, requireAdmin } = require('../middleware/auth.middleware');
-const { renderCertificatePdf, renderRankingCertificatePdf, renderGuestSpeakerCertificatePdf } = require('../utils/certificateGenerator');
+const { renderCertificatePdf, renderRankingCertificatePdf, renderSpeakerCertificatePdf, renderTeacherCertificatePdf } = require('../utils/certificateGenerator');
 const { DEFAULT_TEMPLATES } = require('../utils/certificateTemplateDefaults');
 const { getTemplate, saveTemplate } = require('../utils/certificateTemplateStore');
 const { getSettings } = require('../utils/certificateSettingsStore');
@@ -49,7 +49,7 @@ function isValidElements(elements) {
 // GET /api/certificate-templates/:key  (admin only)
 router.get('/:key', requireAuth, requireAdmin, async (req, res) => {
   const { key } = req.params;
-  if (!isValidKey(key)) return res.status(400).json({ error: "key must be 'completion', 'ranking', or 'guest_speaker'" });
+  if (!isValidKey(key)) return res.status(400).json({ error: "key must be 'completion', 'ranking', 'speaker', or 'teacher'" });
 
   try {
     res.json(await getTemplate(req.user.tenant_id, key));
@@ -63,14 +63,14 @@ router.get('/:key', requireAuth, requireAdmin, async (req, res) => {
 // powers the "Reset to Default Layout" button
 router.get('/:key/defaults', requireAuth, requireAdmin, (req, res) => {
   const { key } = req.params;
-  if (!isValidKey(key)) return res.status(400).json({ error: "key must be 'completion', 'ranking', or 'guest_speaker'" });
+  if (!isValidKey(key)) return res.status(400).json({ error: "key must be 'completion', 'ranking', 'speaker', or 'teacher'" });
   res.json(DEFAULT_TEMPLATES[key]);
 });
 
 // PUT /api/certificate-templates/:key  (admin only) -> upsert
 router.put('/:key', requireAuth, requireAdmin, async (req, res) => {
   const { key } = req.params;
-  if (!isValidKey(key)) return res.status(400).json({ error: "key must be 'completion', 'ranking', or 'guest_speaker'" });
+  if (!isValidKey(key)) return res.status(400).json({ error: "key must be 'completion', 'ranking', 'speaker', or 'teacher'" });
   if (!isValidElements(req.body.elements)) {
     return res.status(400).json({ error: `elements must be a non-empty array of valid positioned elements (max ${MAX_ELEMENTS})` });
   }
@@ -89,7 +89,7 @@ router.put('/:key', requireAuth, requireAdmin, async (req, res) => {
 // saving them.
 router.post('/:key/preview.pdf', requireAuth, requireAdmin, async (req, res) => {
   const { key } = req.params;
-  if (!isValidKey(key)) return res.status(400).json({ error: "key must be 'completion', 'ranking', or 'guest_speaker'" });
+  if (!isValidKey(key)) return res.status(400).json({ error: "key must be 'completion', 'ranking', 'speaker', or 'teacher'" });
   if (!isValidElements(req.body.elements)) {
     return res.status(400).json({ error: `elements must be a non-empty array of valid positioned elements (max ${MAX_ELEMENTS})` });
   }
@@ -129,9 +129,20 @@ router.post('/:key/preview.pdf', requireAuth, requireAdmin, async (req, res) => 
         customFields: settings.custom_fields,
         template,
       }, res);
-    } else {
-      await renderGuestSpeakerCertificatePdf({
+    } else if (key === 'speaker') {
+      await renderSpeakerCertificatePdf({
         speaker: { full_name: 'Juan Dela Cruz', position: 'Senior Reporter', organization: 'Philippine Daily Inquirer', topic: 'The Future of Campus Journalism' },
+        dateRange: settings.date_range,
+        venue: settings.venue,
+        officeLine: settings.office_line,
+        signatoryName: settings.signatory_name,
+        signatoryTitle: settings.signatory_title,
+        customFields: settings.custom_fields,
+        template,
+      }, res);
+    } else {
+      await renderTeacherCertificatePdf({
+        teacher: { full_name: 'Juan Dela Cruz', role: 'Facilitator', department: 'Journalism Department', topic: 'News Writing Workshop' },
         dateRange: settings.date_range,
         venue: settings.venue,
         officeLine: settings.office_line,

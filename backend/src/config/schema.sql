@@ -88,7 +88,7 @@ CREATE TABLE IF NOT EXISTS category_rankings (
 CREATE TABLE IF NOT EXISTS certificate_templates (
   id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   tenant_id       UUID NOT NULL REFERENCES tenants(id),
-  template_key    VARCHAR(20) NOT NULL, -- 'completion' | 'ranking'
+  template_key    VARCHAR(20) NOT NULL, -- 'completion' | 'ranking' | 'speaker' | 'teacher'
   elements        JSONB NOT NULL DEFAULT '[]',
   orientation     VARCHAR(20) NOT NULL DEFAULT 'portrait', -- 'portrait' | 'landscape'
   updated_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -111,15 +111,28 @@ CREATE TABLE IF NOT EXISTS certificate_settings (
   updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- Guest speakers invited to the press conference, registered the same way
--- students are and issued their own Certificate of Recognition.
-CREATE TABLE IF NOT EXISTS guest_speakers (
+-- Speakers/lecturers invited to the press conference, registered the same
+-- way students are and issued their own Certificate of Recognition.
+CREATE TABLE IF NOT EXISTS speakers (
   id           UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   tenant_id    UUID NOT NULL REFERENCES tenants(id),
   full_name    VARCHAR(150) NOT NULL,
   position     VARCHAR(150),
   organization VARCHAR(200),
   topic        VARCHAR(200),
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Teachers who participated in running the press conference (facilitator,
+-- judge, coordinator, reactor, etc.), registered so they can be issued their
+-- own exclusive Certificate of Appreciation.
+CREATE TABLE IF NOT EXISTS teachers (
+  id           UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  tenant_id    UUID NOT NULL REFERENCES tenants(id),
+  full_name    VARCHAR(150) NOT NULL,
+  role         VARCHAR(150), -- e.g. "Facilitator", "Judge", "Coordinator"
+  department   VARCHAR(200),
+  topic        VARCHAR(200), -- session/topic they handled, if applicable
   created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
@@ -163,4 +176,5 @@ CREATE INDEX IF NOT EXISTS idx_categories_tenant ON categories(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_attendance_tenant ON attendance(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_rankings_tenant ON category_rankings(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_certificate_templates_tenant ON certificate_templates(tenant_id);
-CREATE INDEX IF NOT EXISTS idx_guest_speakers_tenant ON guest_speakers(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_speakers_tenant ON speakers(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_teachers_tenant ON teachers(tenant_id);

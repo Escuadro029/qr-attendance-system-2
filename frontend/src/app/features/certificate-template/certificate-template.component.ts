@@ -55,10 +55,17 @@ const TYPE_FIELDS: Record<CertificateKey, { tag: string; label: string }[]> = {
     { tag: '{{rank_word}}', label: 'Rank' },
     { tag: '{{event_name}}', label: 'Event Name' },
   ],
-  guest_speaker: [
+  speaker: [
     { tag: '{{position}}', label: 'Position' },
     { tag: '{{organization}}', label: 'Organization' },
     { tag: '{{position_line}}', label: 'Position, Organization' },
+    { tag: '{{topic}}', label: 'Topic' },
+    { tag: '{{event_name}}', label: 'Event Name' },
+  ],
+  teacher: [
+    { tag: '{{role}}', label: 'Role' },
+    { tag: '{{department}}', label: 'Department' },
+    { tag: '{{role_line}}', label: 'Role, Department' },
     { tag: '{{topic}}', label: 'Topic' },
     { tag: '{{event_name}}', label: 'Event Name' },
   ],
@@ -79,7 +86,8 @@ let nextId = 0;
       <div class="type-tabs">
         <button class="btn" [class.btn-gold]="key() === 'completion'" [class.btn-outline]="key() !== 'completion'" (click)="selectKey('completion')">Completion Certificate</button>
         <button class="btn" [class.btn-gold]="key() === 'ranking'" [class.btn-outline]="key() !== 'ranking'" (click)="selectKey('ranking')">Ranking Certificate</button>
-        <button class="btn" [class.btn-gold]="key() === 'guest_speaker'" [class.btn-outline]="key() !== 'guest_speaker'" (click)="selectKey('guest_speaker')">Guest Speaker Certificate</button>
+        <button class="btn" [class.btn-gold]="key() === 'speaker'" [class.btn-outline]="key() !== 'speaker'" (click)="selectKey('speaker')">Speaker/Lecturer Certificate</button>
+        <button class="btn" [class.btn-gold]="key() === 'teacher'" [class.btn-outline]="key() !== 'teacher'" (click)="selectKey('teacher')">Teacher Certificate</button>
       </div>
 
       <div class="toolbar">
@@ -131,7 +139,7 @@ let nextId = 0;
                         [style.font-weight]="el.bold ? 700 : 400"
                         [style.font-style]="el.italics ? 'italic' : 'normal'"
                         [style.text-align]="el.align || 'left'"
-                        [style.color]="el.color || '#1A1A1A'"
+                        [style.color]="el.color || '#2D3748'"
                         [style.text-transform]="el.uppercase ? 'uppercase' : 'none'"
                       >{{ el.text }}</div>
                     }
@@ -206,7 +214,7 @@ let nextId = 0;
                 <div class="style-row">
                   <button type="button" class="chip-btn" [class.active]="el.fontFamily !== 'serif'" (click)="updateElement(el.id, { fontFamily: 'sans' })">Sans</button>
                   <button type="button" class="chip-btn" [class.active]="el.fontFamily === 'serif'" (click)="updateElement(el.id, { fontFamily: 'serif' })">Serif</button>
-                  <label class="color-label">Color <input type="color" [ngModel]="el.color || '#1A1A1A'" (ngModelChange)="updateElement(el.id, { color: $event })" /></label>
+                  <label class="color-label">Color <input type="color" [ngModel]="el.color || '#2D3748'" (ngModelChange)="updateElement(el.id, { color: $event })" /></label>
                 </div>
               }
 
@@ -264,7 +272,7 @@ let nextId = 0;
   `,
   styles: [`
     .lede { color: #666; margin: 6px 0 20px; }
-    .type-tabs { display: flex; gap: 10px; margin-bottom: 14px; }
+    .type-tabs { display: flex; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
     .toolbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
     .orientation-toggle { display: flex; gap: 4px; margin-right: 8px; padding-right: 8px; border-right: 1px solid var(--border); }
     .spacer { flex: 1; }
@@ -278,8 +286,8 @@ let nextId = 0;
     .page-canvas { position: relative; background: #fff; box-shadow: var(--shadow); margin: 0 auto; }
 
     .el-box { position: absolute; box-sizing: border-box; border: 1px dashed transparent; cursor: move; overflow: hidden; user-select: none; }
-    .el-box:hover { border-color: rgba(199,162,74,0.6); }
-    .el-box.selected { border: 1px solid var(--gold); box-shadow: 0 0 0 2px rgba(199,162,74,0.25); }
+    .el-box:hover { border-color: rgba(43,108,176,0.6); }
+    .el-box.selected { border: 1px solid var(--navy); box-shadow: 0 0 0 2px rgba(43,108,176,0.25); }
     .el-text { width: 100%; height: 100%; white-space: pre-wrap; overflow: hidden; line-height: 1.25; }
     .el-line { width: 100%; margin-top: auto; margin-bottom: auto; }
     .el-shape { width: 100%; height: 100%; box-sizing: border-box; border-style: solid; }
@@ -287,7 +295,7 @@ let nextId = 0;
     .el-qr { width: 100%; height: 100%; border: 1px dashed #999; display: flex; align-items: center; justify-content: center; font-size: 0.6rem; color: #999; background: repeating-linear-gradient(45deg, #f5f5f5, #f5f5f5 4px, #fff 4px, #fff 8px); }
     .el-image { width: 100%; height: 100%; object-fit: contain; }
     .logo-preview { display: block; max-width: 100%; max-height: 90px; margin-bottom: 8px; border: 1px solid var(--border); border-radius: 4px; }
-    .resize-handle { position: absolute; right: -4px; bottom: -4px; width: 10px; height: 10px; background: var(--gold); border-radius: 2px; cursor: nwse-resize; }
+    .resize-handle { position: absolute; right: -4px; bottom: -4px; width: 10px; height: 10px; background: var(--navy); border-radius: 2px; cursor: nwse-resize; }
     .delete-handle {
       position: absolute; right: -8px; top: -8px; width: 18px; height: 18px; padding: 0;
       background: var(--danger); color: #fff; border: 2px solid #fff; border-radius: 50%;
@@ -436,7 +444,7 @@ export class CertificateTemplateComponent implements OnInit, OnDestroy {
     const id = `text_${Date.now()}_${nextId++}`;
     const el: CertificateElement = {
       id, type: 'text', x: 200, y: 400, width: 200, height: 20,
-      text: 'New text', fontSize: 12, align: 'left', fontFamily: 'sans', color: '#1A1A1A',
+      text: 'New text', fontSize: 12, align: 'left', fontFamily: 'sans', color: '#2D3748',
     };
     this.elements.set([...this.elements(), el]);
     this.selectedId.set(id);

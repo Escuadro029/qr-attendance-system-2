@@ -10,8 +10,8 @@ import { AuthService } from '../../core/services/auth.service';
   template: `
     <div class="login-wrap">
       <div class="card login-card">
-        <div class="crest">PC</div>
-        <h1 class="headline">The Press Conference</h1>
+        <div class="crest">PF</div>
+        <h1 class="headline">Press-files</h1>
         <p class="subtitle">QR Attendance &amp; Certification System — Teacher Sign In</p>
 
         <form (ngSubmit)="submit()">

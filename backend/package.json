@@ -1,7 +1,7 @@
 {
   "name": "qr-attendance-backend",
   "version": "1.0.0",
-  "description": "QR Code Attendance Management System - API (Press Conference Journalism School)",
+  "description": "QR Code Attendance Management System - API (Press-files, Press Conference Journalism School)",
   "main": "src/server.js",
   "type": "commonjs",
   "scripts": {

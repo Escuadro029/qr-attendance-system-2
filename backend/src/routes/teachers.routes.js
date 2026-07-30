@@ -1,81 +1,81 @@
 const express = require('express');
 const pool = require('../config/db');
 const { requireAuth } = require('../middleware/auth.middleware');
-const { renderGuestSpeakerCertificatePdf } = require('../utils/certificateGenerator');
+const { renderTeacherCertificatePdf } = require('../utils/certificateGenerator');
 const { safeFilename } = require('../utils/safeFilename');
 const { getTemplate } = require('../utils/certificateTemplateStore');
 const { getSettings } = require('../utils/certificateSettingsStore');
 
 const router = express.Router();
 
-// POST /api/guest-speakers  -> register a guest speaker
+// POST /api/teachers  -> register a teacher's participation
 router.post('/', requireAuth, async (req, res) => {
-  const { full_name, position, organization, topic } = req.body;
+  const { full_name, role, department, topic } = req.body;
   if (!full_name) {
     return res.status(400).json({ error: 'full_name is required' });
   }
 
   try {
     const result = await pool.query(
-      `INSERT INTO guest_speakers (tenant_id, full_name, position, organization, topic)
+      `INSERT INTO teachers (tenant_id, full_name, role, department, topic)
        VALUES ($1, $2, $3, $4, $5)
        RETURNING *`,
-      [req.user.tenant_id, full_name, position || null, organization || null, topic || null]
+      [req.user.tenant_id, full_name, role || null, department || null, topic || null]
     );
     res.status(201).json(result.rows[0]);
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: 'Failed to register guest speaker' });
+    res.status(500).json({ error: 'Failed to register teacher' });
   }
 });
 
-// GET /api/guest-speakers  -> list all
+// GET /api/teachers  -> list all
 router.get('/', requireAuth, async (req, res) => {
   try {
-    const result = await pool.query('SELECT * FROM guest_speakers WHERE tenant_id = $1 ORDER BY created_at DESC', [
+    const result = await pool.query('SELECT * FROM teachers WHERE tenant_id = $1 ORDER BY created_at DESC', [
       req.user.tenant_id,
     ]);
     res.json(result.rows);
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: 'Failed to fetch guest speakers' });
+    res.status(500).json({ error: 'Failed to fetch teachers' });
   }
 });
 
-// DELETE /api/guest-speakers/:id
+// DELETE /api/teachers/:id
 router.delete('/:id', requireAuth, async (req, res) => {
   try {
-    const result = await pool.query('DELETE FROM guest_speakers WHERE id = $1 AND tenant_id = $2 RETURNING id', [
+    const result = await pool.query('DELETE FROM teachers WHERE id = $1 AND tenant_id = $2 RETURNING id', [
       req.params.id,
       req.user.tenant_id,
     ]);
-    if (result.rowCount === 0) return res.status(404).json({ error: 'Guest speaker not found' });
-    res.json({ message: 'Guest speaker removed.' });
+    if (result.rowCount === 0) return res.status(404).json({ error: 'Teacher not found' });
+    res.json({ message: 'Teacher removed.' });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: 'Failed to delete guest speaker' });
+    res.status(500).json({ error: 'Failed to delete teacher' });
   }
 });
 
-// GET /api/guest-speakers/:id/certificate.pdf -> Certificate of Recognition
+// GET /api/teachers/:id/certificate.pdf -> Certificate of Appreciation
 router.get('/:id/certificate.pdf', requireAuth, async (req, res) => {
   try {
-    const result = await pool.query('SELECT * FROM guest_speakers WHERE id = $1 AND tenant_id = $2', [
+    const result = await pool.query('SELECT * FROM teachers WHERE id = $1 AND tenant_id = $2', [
       req.params.id,
       req.user.tenant_id,
     ]);
-    if (result.rowCount === 0) return res.status(404).json({ error: 'Guest speaker not found' });
-    const speaker = result.rows[0];
+    if (result.rowCount === 0) return res.status(404).json({ error: 'Teacher not found' });
+    const teacher = result.rows[0];
 
     const [template, settings] = await Promise.all([
-      getTemplate(req.user.tenant_id, 'guest_speaker'),
+      getTemplate(req.user.tenant_id, 'teacher'),
       getSettings(req.user.tenant_id),
     ]);
 
     res.set('Content-Type', 'application/pdf');
-    res.set('Content-Disposition', `inline; filename="certificate-${safeFilename(speaker.full_name)}.pdf"`);
-    await renderGuestSpeakerCertificatePdf({
-      speaker,
+    res.set('Content-Disposition', `inline; filename="certificate-${safeFilename(teacher.full_name)}.pdf"`);
+    await renderTeacherCertificatePdf({
+      teacher,
       eventName: req.query.event || 'School Press Conference',
       dateRange: req.query.dates || settings.date_range,
       venue: req.query.venue || settings.venue,
@@ -87,7 +87,7 @@ router.get('/:id/certificate.pdf', requireAuth, async (req, res) => {
     }, res);
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: 'Failed to generate guest speaker certificate' });
+    res.status(500).json({ error: 'Failed to generate teacher certificate' });
   }
 });
 

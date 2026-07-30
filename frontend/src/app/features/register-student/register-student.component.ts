@@ -2,10 +2,10 @@ import { Component, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 import { ApiService } from '../../core/services/api.service';
-import { GuestSpeaker, Student } from '../../core/models/models';
+import { Speaker, Student, Teacher } from '../../core/models/models';
 import { DocumentModalComponent } from '../../shared/components/document-modal/document-modal.component';
 
-type Mode = 'student' | 'guest';
+type Mode = 'student' | 'speaker' | 'teacher';
 
 @Component({
   selector: 'app-register-student',
@@ -15,7 +15,8 @@ type Mode = 'student' | 'guest';
     <div class="container">
       <div class="type-tabs">
         <button class="btn" [class.btn-gold]="mode() === 'student'" [class.btn-outline]="mode() !== 'student'" (click)="mode.set('student')">Register Student</button>
-        <button class="btn" [class.btn-gold]="mode() === 'guest'" [class.btn-outline]="mode() !== 'guest'" (click)="mode.set('guest')">Register Guest Speaker</button>
+        <button class="btn" [class.btn-gold]="mode() === 'speaker'" [class.btn-outline]="mode() !== 'speaker'" (click)="mode.set('speaker')">Register Speaker/Lecturer</button>
+        <button class="btn" [class.btn-gold]="mode() === 'teacher'" [class.btn-outline]="mode() !== 'teacher'" (click)="mode.set('teacher')">Register Teacher</button>
       </div>
 
       @if (mode() === 'student') {
@@ -70,34 +71,34 @@ type Mode = 'student' | 'guest';
             }
           </div>
         </div>
-      } @else {
-        <h1 class="headline">Register Guest Speaker</h1>
-        <p class="lede">Adds a guest speaker so you can issue them a Certificate of Recognition.</p>
+      } @else if (mode() === 'speaker') {
+        <h1 class="headline">Register Speaker/Lecturer</h1>
+        <p class="lede">Adds a speaker/lecturer so you can issue them a Certificate of Recognition.</p>
 
         <div class="grid">
-          <form class="card" (ngSubmit)="submitGuest()">
+          <form class="card" (ngSubmit)="submitSpeaker()">
             <label>Full Name</label>
-            <input name="guest_full_name" [(ngModel)]="guestForm.full_name" required placeholder="Atty. Carmela Ruiz" />
+            <input name="speaker_full_name" [(ngModel)]="speakerForm.full_name" required placeholder="Atty. Carmela Ruiz" />
 
             <label>Position (optional)</label>
-            <input name="guest_position" [(ngModel)]="guestForm.position" placeholder="e.g. Broadcast Journalist" />
+            <input name="speaker_position" [(ngModel)]="speakerForm.position" placeholder="e.g. Broadcast Journalist" />
 
             <label>Organization (optional)</label>
-            <input name="guest_organization" [(ngModel)]="guestForm.organization" placeholder="e.g. GMA News" />
+            <input name="speaker_organization" [(ngModel)]="speakerForm.organization" placeholder="e.g. GMA News" />
 
             <label>Topic (optional)</label>
-            <input name="guest_topic" [(ngModel)]="guestForm.topic" placeholder="e.g. Ethics in Digital Journalism" />
+            <input name="speaker_topic" [(ngModel)]="speakerForm.topic" placeholder="e.g. Ethics in Digital Journalism" />
 
-            @if (guestError()) { <p class="error">{{ guestError() }}</p> }
+            @if (speakerError()) { <p class="error">{{ speakerError() }}</p> }
 
-            <button type="submit" class="btn btn-primary" style="width:100%; margin-top:16px;" [disabled]="guestLoading()">
-              {{ guestLoading() ? 'Registering…' : 'Register Guest Speaker' }}
+            <button type="submit" class="btn btn-primary" style="width:100%; margin-top:16px;" [disabled]="speakerLoading()">
+              {{ speakerLoading() ? 'Registering…' : 'Register Speaker/Lecturer' }}
             </button>
           </form>
 
           <div class="card">
-            <h3 class="headline" style="font-size:1rem; margin-bottom:12px;">Registered Guest Speakers</h3>
-            @if (guestSpeakersLoading()) {
+            <h3 class="headline" style="font-size:1rem; margin-bottom:12px;">Registered Speakers/Lecturers</h3>
+            @if (speakersLoading()) {
               <p class="placeholder">Loading…</p>
             } @else {
               <table>
@@ -105,18 +106,71 @@ type Mode = 'student' | 'guest';
                   <tr><th>Name</th><th>Position</th><th></th></tr>
                 </thead>
                 <tbody>
-                  @for (speaker of guestSpeakers(); track speaker.id) {
+                  @for (speaker of speakers(); track speaker.id) {
                     <tr>
                       <td data-label="Name">{{ speaker.full_name }}</td>
                       <td data-label="Position">{{ speaker.position || '—' }}{{ speaker.organization ? ', ' + speaker.organization : '' }}</td>
                       <td class="actions" data-label="Actions">
-                        <button class="btn btn-gold btn-sm" (click)="viewCertificate(speaker)">Certificate</button>
-                        <button class="btn btn-danger btn-sm" (click)="removeGuestSpeaker(speaker)">Delete</button>
+                        <button class="btn btn-gold btn-sm" (click)="viewSpeakerCertificate(speaker)">Certificate</button>
+                        <button class="btn btn-danger btn-sm" (click)="removeSpeaker(speaker)">Delete</button>
                       </td>
                     </tr>
                   }
                   @empty {
-                    <tr><td colspan="3" class="placeholder">No guest speakers registered yet.</td></tr>
+                    <tr><td colspan="3" class="placeholder">No speakers/lecturers registered yet.</td></tr>
+                  }
+                </tbody>
+              </table>
+            }
+          </div>
+        </div>
+      } @else {
+        <h1 class="headline">Register Teacher</h1>
+        <p class="lede">Adds a teacher's participation (facilitator, judge, coordinator, etc.) so you can issue them their own Certificate of Appreciation.</p>
+
+        <div class="grid">
+          <form class="card" (ngSubmit)="submitTeacher()">
+            <label>Full Name</label>
+            <input name="teacher_full_name" [(ngModel)]="teacherForm.full_name" required placeholder="Maria Santos" />
+
+            <label>Role (optional)</label>
+            <input name="teacher_role" [(ngModel)]="teacherForm.role" placeholder="e.g. Facilitator, Judge, Coordinator" />
+
+            <label>Department (optional)</label>
+            <input name="teacher_department" [(ngModel)]="teacherForm.department" placeholder="e.g. Journalism Department" />
+
+            <label>Topic/Session (optional)</label>
+            <input name="teacher_topic" [(ngModel)]="teacherForm.topic" placeholder="e.g. News Writing Workshop" />
+
+            @if (teacherError()) { <p class="error">{{ teacherError() }}</p> }
+
+            <button type="submit" class="btn btn-primary" style="width:100%; margin-top:16px;" [disabled]="teacherLoading()">
+              {{ teacherLoading() ? 'Registering…' : 'Register Teacher' }}
+            </button>
+          </form>
+
+          <div class="card">
+            <h3 class="headline" style="font-size:1rem; margin-bottom:12px;">Registered Teachers</h3>
+            @if (teachersLoading()) {
+              <p class="placeholder">Loading…</p>
+            } @else {
+              <table>
+                <thead>
+                  <tr><th>Name</th><th>Role</th><th></th></tr>
+                </thead>
+                <tbody>
+                  @for (teacher of teachers(); track teacher.id) {
+                    <tr>
+                      <td data-label="Name">{{ teacher.full_name }}</td>
+                      <td data-label="Role">{{ teacher.role || '—' }}{{ teacher.department ? ', ' + teacher.department : '' }}</td>
+                      <td class="actions" data-label="Actions">
+                        <button class="btn btn-gold btn-sm" (click)="viewTeacherCertificate(teacher)">Certificate</button>
+                        <button class="btn btn-danger btn-sm" (click)="removeTeacher(teacher)">Delete</button>
+                      </td>
+                    </tr>
+                  }
+                  @empty {
+                    <tr><td colspan="3" class="placeholder">No teachers registered yet.</td></tr>
                   }
                 </tbody>
               </table>
@@ -138,7 +192,7 @@ type Mode = 'student' | 'guest';
     ></app-document-modal>
   `,
   styles: [`
-    .type-tabs { display: flex; gap: 10px; margin-bottom: 20px; }
+    .type-tabs { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; }
     .lede { color: #666; margin: 6px 0 24px; }
     .grid { display: grid; grid-template-columns: 1fr 320px; gap: 20px; align-items: start; }
     .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
@@ -165,14 +219,21 @@ export class RegisterStudentComponent implements OnInit {
   qrObjectUrl = signal<string>('');
   downloading = signal(false);
 
-  // Guest speaker registration
-  guestForm: Partial<GuestSpeaker> = { full_name: '', position: '', organization: '', topic: '' };
-  guestLoading = signal(false);
-  guestError = signal('');
-  guestSpeakers = signal<GuestSpeaker[]>([]);
-  guestSpeakersLoading = signal(true);
+  // Speaker/lecturer registration
+  speakerForm: Partial<Speaker> = { full_name: '', position: '', organization: '', topic: '' };
+  speakerLoading = signal(false);
+  speakerError = signal('');
+  speakers = signal<Speaker[]>([]);
+  speakersLoading = signal(true);
 
-  // Certificate view modal (guest speaker)
+  // Teacher participation registration
+  teacherForm: Partial<Teacher> = { full_name: '', role: '', department: '', topic: '' };
+  teacherLoading = signal(false);
+  teacherError = signal('');
+  teachers = signal<Teacher[]>([]);
+  teachersLoading = signal(true);
+
+  // Certificate view modal (speaker/teacher)
   modalOpen = signal(false);
   modalTitle = signal('');
   modalUrl = signal<string | SafeResourceUrl | null>(null);
@@ -185,7 +246,8 @@ export class RegisterStudentComponent implements OnInit {
   constructor(private api: ApiService, private sanitizer: DomSanitizer) {}
 
   ngOnInit() {
-    this.loadGuestSpeakers();
+    this.loadSpeakers();
+    this.loadTeachers();
   }
 
   // ---- Student ----
@@ -232,36 +294,36 @@ export class RegisterStudentComponent implements OnInit {
     });
   }
 
-  // ---- Guest speakers ----
+  // ---- Speakers/lecturers ----
 
-  loadGuestSpeakers() {
-    this.guestSpeakersLoading.set(true);
-    this.api.getGuestSpeakers().subscribe({
-      next: (speakers) => this.guestSpeakers.set(speakers),
-      complete: () => this.guestSpeakersLoading.set(false),
+  loadSpeakers() {
+    this.speakersLoading.set(true);
+    this.api.getSpeakers().subscribe({
+      next: (speakers) => this.speakers.set(speakers),
+      complete: () => this.speakersLoading.set(false),
     });
   }
 
-  submitGuest() {
-    if (!this.guestForm.full_name) return;
-    this.guestLoading.set(true);
-    this.guestError.set('');
-    this.api.registerGuestSpeaker(this.guestForm).subscribe({
+  submitSpeaker() {
+    if (!this.speakerForm.full_name) return;
+    this.speakerLoading.set(true);
+    this.speakerError.set('');
+    this.api.registerSpeaker(this.speakerForm).subscribe({
       next: () => {
-        this.guestForm = { full_name: '', position: '', organization: '', topic: '' };
-        this.loadGuestSpeakers();
+        this.speakerForm = { full_name: '', position: '', organization: '', topic: '' };
+        this.loadSpeakers();
       },
-      error: (err) => this.guestError.set(err?.error?.error || 'Registration failed.'),
-      complete: () => this.guestLoading.set(false),
+      error: (err) => this.speakerError.set(err?.error?.error || 'Registration failed.'),
+      complete: () => this.speakerLoading.set(false),
     });
   }
 
-  removeGuestSpeaker(speaker: GuestSpeaker) {
-    if (!confirm(`Remove ${speaker.full_name} from guest speakers?`)) return;
-    this.api.deleteGuestSpeaker(speaker.id).subscribe(() => this.loadGuestSpeakers());
+  removeSpeaker(speaker: Speaker) {
+    if (!confirm(`Remove ${speaker.full_name} from speakers/lecturers?`)) return;
+    this.api.deleteSpeaker(speaker.id).subscribe(() => this.loadSpeakers());
   }
 
-  viewCertificate(speaker: GuestSpeaker) {
+  viewSpeakerCertificate(speaker: Speaker) {
     this.revokeCurrent();
     this.modalTitle.set(`${speaker.full_name} — Certificate of Recognition`);
     this.modalUrl.set(null);
@@ -269,7 +331,56 @@ export class RegisterStudentComponent implements OnInit {
     this.modalLoading.set(true);
     this.modalOpen.set(true);
     this.currentFilename = `certificate-${speaker.full_name.replace(/\s+/g, '_')}.pdf`;
-    this.api.getGuestSpeakerCertificateBlob(speaker.id).subscribe({
+    this.api.getSpeakerCertificateBlob(speaker.id).subscribe({
+      next: (blob) => {
+        this.currentBlob = blob;
+        const url = URL.createObjectURL(blob);
+        this.currentRawObjectUrl = url;
+        this.modalUrl.set(this.sanitizer.bypassSecurityTrustResourceUrl(url));
+      },
+      error: (err) => this.modalError.set(err?.error?.error || 'Could not load certificate.'),
+      complete: () => this.modalLoading.set(false),
+    });
+  }
+
+  // ---- Teachers ----
+
+  loadTeachers() {
+    this.teachersLoading.set(true);
+    this.api.getTeachers().subscribe({
+      next: (teachers) => this.teachers.set(teachers),
+      complete: () => this.teachersLoading.set(false),
+    });
+  }
+
+  submitTeacher() {
+    if (!this.teacherForm.full_name) return;
+    this.teacherLoading.set(true);
+    this.teacherError.set('');
+    this.api.registerTeacher(this.teacherForm).subscribe({
+      next: () => {
+        this.teacherForm = { full_name: '', role: '', department: '', topic: '' };
+        this.loadTeachers();
+      },
+      error: (err) => this.teacherError.set(err?.error?.error || 'Registration failed.'),
+      complete: () => this.teacherLoading.set(false),
+    });
+  }
+
+  removeTeacher(teacher: Teacher) {
+    if (!confirm(`Remove ${teacher.full_name} from teachers?`)) return;
+    this.api.deleteTeacher(teacher.id).subscribe(() => this.loadTeachers());
+  }
+
+  viewTeacherCertificate(teacher: Teacher) {
+    this.revokeCurrent();
+    this.modalTitle.set(`${teacher.full_name} — Certificate of Appreciation`);
+    this.modalUrl.set(null);
+    this.modalError.set('');
+    this.modalLoading.set(true);
+    this.modalOpen.set(true);
+    this.currentFilename = `certificate-${teacher.full_name.replace(/\s+/g, '_')}.pdf`;
+    this.api.getTeacherCertificateBlob(teacher.id).subscribe({
       next: (blob) => {
         this.currentBlob = blob;
         const url = URL.createObjectURL(blob);

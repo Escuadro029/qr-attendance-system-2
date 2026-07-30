@@ -2,7 +2,7 @@ import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
-import { Student, Category, ProgressRow, ScanResult, AttendanceRecord, AppUser, Ranking, CertificateTemplate, CertificateSettings, CertificateKey, GuestSpeaker } from '../models/models';
+import { Student, Category, ProgressRow, ScanResult, AttendanceRecord, AppUser, Ranking, CertificateTemplate, CertificateSettings, CertificateKey, Speaker, Teacher } from '../models/models';
 
 @Injectable({ providedIn: 'root' })
 export class ApiService {
@@ -139,20 +139,37 @@ export class ApiService {
     return this.http.put<CertificateSettings>(`${this.base}/certificate-settings`, payload);
   }
 
-  // Guest speakers
-  registerGuestSpeaker(payload: Partial<GuestSpeaker>): Observable<GuestSpeaker> {
-    return this.http.post<GuestSpeaker>(`${this.base}/guest-speakers`, payload);
+  // Speakers/lecturers
+  registerSpeaker(payload: Partial<Speaker>): Observable<Speaker> {
+    return this.http.post<Speaker>(`${this.base}/speakers`, payload);
   }
 
-  getGuestSpeakers(): Observable<GuestSpeaker[]> {
-    return this.http.get<GuestSpeaker[]>(`${this.base}/guest-speakers`);
+  getSpeakers(): Observable<Speaker[]> {
+    return this.http.get<Speaker[]>(`${this.base}/speakers`);
   }
 
-  deleteGuestSpeaker(id: string): Observable<{ message: string }> {
-    return this.http.delete<{ message: string }>(`${this.base}/guest-speakers/${id}`);
+  deleteSpeaker(id: string): Observable<{ message: string }> {
+    return this.http.delete<{ message: string }>(`${this.base}/speakers/${id}`);
   }
 
-  getGuestSpeakerCertificateBlob(id: string): Observable<Blob> {
-    return this.http.get(`${this.base}/guest-speakers/${id}/certificate.pdf`, { responseType: 'blob' });
+  getSpeakerCertificateBlob(id: string): Observable<Blob> {
+    return this.http.get(`${this.base}/speakers/${id}/certificate.pdf`, { responseType: 'blob' });
+  }
+
+  // Teachers (participation entries, distinct from login accounts in Users)
+  registerTeacher(payload: Partial<Teacher>): Observable<Teacher> {
+    return this.http.post<Teacher>(`${this.base}/teachers`, payload);
+  }
+
+  getTeachers(): Observable<Teacher[]> {
+    return this.http.get<Teacher[]>(`${this.base}/teachers`);
+  }
+
+  deleteTeacher(id: string): Observable<{ message: string }> {
+    return this.http.delete<{ message: string }>(`${this.base}/teachers/${id}`);
+  }
+
+  getTeacherCertificateBlob(id: string): Observable<Blob> {
+    return this.http.get(`${this.base}/teachers/${id}/certificate.pdf`, { responseType: 'blob' });
   }
 }

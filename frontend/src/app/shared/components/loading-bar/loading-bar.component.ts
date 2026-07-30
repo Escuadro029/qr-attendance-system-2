@@ -21,7 +21,7 @@ import { LoadingService } from '../../../core/services/loading.service';
       left: 0;
       right: 0;
       height: 3px;
-      background: rgba(199, 162, 74, 0.2);
+      background: rgba(214, 228, 240, 0.5);
       overflow: hidden;
       z-index: 9999;
     }

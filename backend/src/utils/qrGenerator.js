@@ -12,7 +12,7 @@ async function generateQrPngBuffer(qrToken) {
     margin: 2,
     scale: 8,
     color: {
-      dark: '#0B1F3A', // deep navy, matches the press-conference theme
+      dark: '#2B6CB0', // calm blue, matches the Press-files theme
       light: '#FFFFFF',
     },
   });
@@ -23,7 +23,7 @@ async function generateQrDataUrl(qrToken) {
     errorCorrectionLevel: 'H',
     margin: 2,
     scale: 8,
-    color: { dark: '#0B1F3A', light: '#FFFFFF' },
+    color: { dark: '#2B6CB0', light: '#FFFFFF' },
   });
 }
 

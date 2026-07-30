@@ -1,9 +1,9 @@
 const PDFDocument = require('pdfkit');
 const { generateQrPngBuffer } = require('./qrGenerator');
 
-// Palette: deep navy + press-gold, matches a newsroom/press-pass look
-const NAVY = '#0B1F3A';
-const GOLD = '#C7A24A';
+// Palette: calm light blue, matches the Press-files theme
+const NAVY = '#2B6CB0';
+const ACCENT = '#CFE9F7';
 const WHITE = '#FFFFFF';
 
 // Standard CR80 card size (matches a real ID card / press pass)
@@ -21,24 +21,24 @@ async function drawCard(doc, originX, originY, student) {
 
   // Background
   doc.rect(0, 0, CARD_W, CARD_H).fill(NAVY);
-  doc.rect(0, 0, CARD_W, 6).fill(GOLD);
-  doc.rect(0, CARD_H - 6, CARD_W, 6).fill(GOLD);
+  doc.rect(0, 0, CARD_W, 6).fill(ACCENT);
+  doc.rect(0, CARD_H - 6, CARD_W, 6).fill(ACCENT);
 
   // DepEd logo placeholder (school pastes official seal image here)
-  doc.circle(24, 26, 15).lineWidth(1).stroke(GOLD);
-  doc.fontSize(5).fillColor(GOLD).font('Helvetica-Bold')
+  doc.circle(24, 26, 15).lineWidth(1).stroke(ACCENT);
+  doc.fontSize(5).fillColor(ACCENT).font('Helvetica-Bold')
     .text('DepEd', 12, 22, { width: 24, align: 'center' });
 
   // Header text
-  doc.fontSize(7).fillColor(GOLD).font('Helvetica-Bold')
+  doc.fontSize(7).fillColor(ACCENT).font('Helvetica-Bold')
     .text('DEPARTMENT OF EDUCATION', 44, 10, { width: CARD_W - 54 });
   doc.fontSize(9).fillColor(WHITE).font('Helvetica-Bold')
     .text((student.school_name || 'Your School Name').toUpperCase(), 44, 20, { width: CARD_W - 54 });
-  doc.fontSize(6.5).fillColor(GOLD).font('Helvetica-Oblique')
+  doc.fontSize(6.5).fillColor(ACCENT).font('Helvetica-Oblique')
     .text('School Press Conference — Official Press Pass', 44, 32, { width: CARD_W - 54 });
 
   // Divider
-  doc.moveTo(10, 46).lineTo(CARD_W - 10, 46).lineWidth(0.5).stroke(GOLD);
+  doc.moveTo(10, 46).lineTo(CARD_W - 10, 46).lineWidth(0.5).stroke(ACCENT);
 
   // Photo placeholder box
   doc.rect(10, 54, 55, 65).lineWidth(1).stroke(WHITE);
@@ -46,13 +46,13 @@ async function drawCard(doc, originX, originY, student) {
 
   // Student details
   const infoX = 74;
-  doc.fontSize(6).fillColor(GOLD).font('Helvetica-Bold').text('NAME', infoX, 54);
+  doc.fontSize(6).fillColor(ACCENT).font('Helvetica-Bold').text('NAME', infoX, 54);
   doc.fontSize(10).fillColor(WHITE).font('Helvetica-Bold').text(student.full_name, infoX, 62, { width: 90 });
 
-  doc.fontSize(6).fillColor(GOLD).font('Helvetica-Bold').text('GRADE & SECTION', infoX, 82);
+  doc.fontSize(6).fillColor(ACCENT).font('Helvetica-Bold').text('GRADE & SECTION', infoX, 82);
   doc.fontSize(8.5).fillColor(WHITE).font('Helvetica').text(`Grade ${student.grade} - ${student.section}`, infoX, 90, { width: 90 });
 
-  doc.fontSize(6).fillColor(GOLD).font('Helvetica-Bold').text('LRN', infoX, 104);
+  doc.fontSize(6).fillColor(ACCENT).font('Helvetica-Bold').text('LRN', infoX, 104);
   doc.fontSize(8.5).fillColor(WHITE).font('Helvetica').text(student.lrn || 'N/A', infoX, 112, { width: 90 });
 
   // QR code
@@ -65,7 +65,7 @@ async function drawCard(doc, originX, originY, student) {
   doc.moveTo(10, CARD_H - 22).lineTo(90, CARD_H - 22).lineWidth(0.5).stroke(WHITE);
   doc.fontSize(5.5).fillColor(WHITE).text('Adviser / Principal Signature', 10, CARD_H - 18, { width: 90 });
 
-  doc.fontSize(5.5).fillColor(GOLD).text(
+  doc.fontSize(5.5).fillColor(ACCENT).text(
     `ID: ${student.student_id_no || student.id.slice(0, 8).toUpperCase()}`,
     10, CARD_H - 32
   );
@@ -119,7 +119,7 @@ async function renderIdCardsBulkPdf(students, res) {
 
     // Dashed cut-line guide around each card slot
     doc.save();
-    doc.dash(4, { space: 3 }).lineWidth(0.75).strokeColor('#999999');
+    doc.dash(4, { space: 3 }).lineWidth(0.75).strokeColor('#A8C3DC');
     doc.rect(x - 3, y - 3, CARD_W + 6, CARD_H + 6).stroke();
     doc.undash();
     doc.restore();

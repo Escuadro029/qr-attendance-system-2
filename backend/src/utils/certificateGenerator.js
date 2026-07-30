@@ -10,8 +10,8 @@ const ALLOWED_FONT_PATHS = new Set(Object.values(fonts).flatMap((variants) => Ob
 pdfMake.setLocalAccessPolicy((path) => ALLOWED_FONT_PATHS.has(path));
 pdfMake.setUrlAccessPolicy(() => false);
 
-const NAVY = '#0B1F3A';
-const INK = '#1A1A1A';
+const NAVY = '#2B6CB0';
+const INK = '#2D3748';
 
 const RANK_WORDS = { 1: 'FIRST', 2: 'SECOND', 3: 'THIRD' };
 
@@ -223,14 +223,14 @@ async function renderRankingCertificatePdf({
 }
 
 /**
- * Certificate of Recognition — guest speakers invited to the press
+ * Certificate of Recognition — speakers/lecturers invited to the press
  * conference (no grade/section/QR; the subtitle line shows their
  * position/organization instead via the composed {{position_line}} field).
  */
-async function renderGuestSpeakerCertificatePdf({
+async function renderSpeakerCertificatePdf({
   speaker, eventName, dateRange, venue, officeLine, signatoryName, signatoryTitle, controlNo, template, customFields,
 }, res) {
-  const finalControlNo = controlNo || generateControlNo('PRESSCONF-GUEST');
+  const finalControlNo = controlNo || generateControlNo('PRESSCONF-SPEAKER');
   const mergeData = applyCustomFields({
     full_name: speaker.full_name,
     position: speaker.position || '',
@@ -248,7 +248,46 @@ async function renderGuestSpeakerCertificatePdf({
     control_no: finalControlNo,
   }, customFields);
 
-  const tpl = template || DEFAULT_TEMPLATES.guest_speaker;
+  const tpl = template || DEFAULT_TEMPLATES.speaker;
+  const docDefinition = await buildCertificateDocDefinition({
+    elements: tpl.elements,
+    orientation: tpl.orientation,
+    mergeData,
+    controlNo: finalControlNo,
+  });
+
+  await streamPdf(docDefinition, res);
+}
+
+/**
+ * Certificate of Appreciation — teachers who participated in running the
+ * press conference (facilitator, judge, coordinator, reactor, etc.), issued
+ * exclusively to them and distinct from the student/speaker certificates
+ * (no grade/section/QR; the subtitle line shows their role/department
+ * instead via the composed {{role_line}} field).
+ */
+async function renderTeacherCertificatePdf({
+  teacher, eventName, dateRange, venue, officeLine, signatoryName, signatoryTitle, controlNo, template, customFields,
+}, res) {
+  const finalControlNo = controlNo || generateControlNo('PRESSCONF-TEACHER');
+  const mergeData = applyCustomFields({
+    full_name: teacher.full_name,
+    role: teacher.role || '',
+    department: teacher.department || '',
+    role_line: [teacher.role, teacher.department].filter(Boolean).join(', '),
+    topic: teacher.topic || '',
+    event_name: eventName || 'School Press Conference',
+    date_range: dateRange || 'on the scheduled date',
+    venue: venue || '',
+    venue_clause: venue ? ` at ${venue}` : '',
+    venue_or_school: venue || 'the school campus',
+    office_line: officeLine || 'Schools Division Office',
+    signatory_name: signatoryName || 'Juan D. Santos',
+    signatory_title: signatoryTitle || 'School Principal / Head Teacher',
+    control_no: finalControlNo,
+  }, customFields);
+
+  const tpl = template || DEFAULT_TEMPLATES.teacher;
   const docDefinition = await buildCertificateDocDefinition({
     elements: tpl.elements,
     orientation: tpl.orientation,
@@ -262,7 +301,8 @@ async function renderGuestSpeakerCertificatePdf({
 module.exports = {
   renderCertificatePdf,
   renderRankingCertificatePdf,
-  renderGuestSpeakerCertificatePdf,
+  renderSpeakerCertificatePdf,
+  renderTeacherCertificatePdf,
   generateControlNo,
   RANK_WORDS,
   buildCertificateDocDefinition,

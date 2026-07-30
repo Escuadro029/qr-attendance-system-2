@@ -13,9 +13,9 @@ export interface PosterData {
   threshold: number;
 }
 
-const NAVY = '#0B1F3A';
-const GOLD = '#C7A24A';
-const GOLD_LIGHT = '#E8D7A8';
+const NAVY = '#2B6CB0';
+const GOLD = '#D6E4F0';
+const GOLD_LIGHT = '#E7EEF4';
 const WHITE = '#FFFFFF';
 
 const SIZES: Record<PosterFormat, { width: number; height: number }> = {
@@ -89,7 +89,7 @@ function drawChipRows(
     row.forEach((text, i) => {
       const w = widths[i];
       roundRectPath(ctx, x, y, w, chipHeight, chipHeight / 2);
-      ctx.fillStyle = 'rgba(199, 162, 74, 0.16)';
+      ctx.fillStyle = 'rgba(214, 228, 240, 0.16)';
       ctx.fill();
       roundRectPath(ctx, x, y, w, chipHeight, chipHeight / 2);
       ctx.strokeStyle = GOLD;
@@ -120,7 +120,7 @@ function drawContentBlock(ctx: CanvasRenderingContext2D, data: PosterData, width
 
   ctx.fillStyle = GOLD_LIGHT;
   ctx.font = '600 30px "Segoe UI", Arial, sans-serif';
-  ctx.fillText('THE PRESS CONFERENCE', centerX, y);
+  ctx.fillText('PRESS-FILES', centerX, y);
 
   y += 84;
   ctx.fillStyle = GOLD;

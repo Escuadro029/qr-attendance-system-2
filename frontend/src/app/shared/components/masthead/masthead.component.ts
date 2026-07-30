@@ -10,9 +10,9 @@ import { AuthService } from '../../../core/services/auth.service';
     <header class="masthead">
       <div class="masthead-top">
         <div class="brand">
-          <span class="brand-mark">PC</span>
+          <span class="brand-mark">PF</span>
           <div class="brand-text">
-            <span class="headline brand-name">The Press Conference</span>
+            <span class="headline brand-name">Press-files</span>
             <span class="brand-sub">QR Attendance &amp; Certification System</span>
           </div>
         </div>

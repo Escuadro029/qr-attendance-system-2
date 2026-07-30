@@ -46,11 +46,20 @@ export interface Student {
   created_at: string;
 }
 
-export interface GuestSpeaker {
+export interface Speaker {
   id: string;
   full_name: string;
   position?: string;
   organization?: string;
+  topic?: string;
+  created_at: string;
+}
+
+export interface Teacher {
+  id: string;
+  full_name: string;
+  role?: string;
+  department?: string;
   topic?: string;
   created_at: string;
 }
@@ -111,7 +120,7 @@ export interface CertificateElement {
 }
 
 export type CertificateOrientation = 'portrait' | 'landscape';
-export type CertificateKey = 'completion' | 'ranking' | 'guest_speaker';
+export type CertificateKey = 'completion' | 'ranking' | 'speaker' | 'teacher';
 
 export interface CertificateTemplate {
   template_key: CertificateKey;

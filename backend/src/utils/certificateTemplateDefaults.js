@@ -9,10 +9,10 @@
 // `orientation` ('portrait' | 'landscape') is a page-level setting, separate
 // from the elements — LETTER is 612x792 in portrait, 792x612 in landscape.
 
-const NAVY = '#0B1F3A';
-const INK = '#1A1A1A';
-const RED = '#C23B3B';
-const GRAY = '#666666';
+const NAVY = '#2B6CB0';
+const INK = '#2D3748';
+const STAMP = '#1A4971';
+const GRAY = '#6B7280';
 
 // Shared frame elements common to both certificate types — everything
 // except the title and body paragraph, which differ per type below.
@@ -24,7 +24,7 @@ const FRAME_ELEMENTS = [
   { id: 'dept_line', type: 'text', x: 0, y: 103, width: 612, height: 20, text: 'Department of Education', fontSize: 15, bold: true, italics: true, color: INK, align: 'center', fontFamily: 'serif' },
   { id: 'office_line', type: 'text', x: 0, y: 124, width: 612, height: 14, text: '{{office_line}}', fontSize: 9, bold: true, uppercase: true, color: INK, align: 'center', fontFamily: 'sans' },
 
-  { id: 'header_divider', type: 'shape', shape: 'line', x: 60, y: 140, width: 492, height: 0, lineColor: '#999999', lineWidth: 1 },
+  { id: 'header_divider', type: 'shape', shape: 'line', x: 60, y: 140, width: 492, height: 0, lineColor: '#B7CCE0', lineWidth: 1 },
 
   { id: 'awarded_to', type: 'text', x: 0, y: 200, width: 612, height: 16, text: 'is awarded to', fontSize: 11, color: INK, align: 'center', fontFamily: 'sans' },
   { id: 'awardee_name', type: 'text', x: 0, y: 218, width: 612, height: 30, text: '{{full_name}}', fontSize: 22, bold: true, color: NAVY, align: 'center', fontFamily: 'serif' },
@@ -37,26 +37,33 @@ const FRAME_ELEMENTS = [
   { id: 'signatory_name', type: 'text', x: 0, y: 646, width: 612, height: 16, text: '{{signatory_name}}', fontSize: 10.5, bold: true, uppercase: true, color: INK, align: 'center', fontFamily: 'sans' },
   { id: 'signatory_title', type: 'text', x: 0, y: 660, width: 612, height: 14, text: '{{signatory_title}}', fontSize: 9, italics: true, color: GRAY, align: 'center', fontFamily: 'sans' },
 
-  { id: 'footer_divider', type: 'shape', shape: 'line', x: 30, y: 744, width: 552, height: 0, lineColor: '#cccccc', lineWidth: 0.5 },
+  { id: 'footer_divider', type: 'shape', shape: 'line', x: 30, y: 744, width: 552, height: 0, lineColor: '#D2E1F0', lineWidth: 0.5 },
   ...Array.from({ length: 4 }, (_, i) => ({
-    id: `logo_${i + 1}`, type: 'shape', shape: 'rect', x: 34 + i * 34, y: 750, width: 26, height: 26, cornerRadius: 3, lineColor: '#bbbbbb', lineWidth: 0.75,
+    id: `logo_${i + 1}`, type: 'shape', shape: 'rect', x: 34 + i * 34, y: 750, width: 26, height: 26, cornerRadius: 3, lineColor: '#C3D6E8', lineWidth: 0.75,
   })),
   ...Array.from({ length: 4 }, (_, i) => ({
-    id: `logo_${i + 1}_label`, type: 'text', x: 34 + i * 34, y: 761, width: 26, height: 10, text: 'LOGO', fontSize: 5, color: '#999999', align: 'center', fontFamily: 'sans',
+    id: `logo_${i + 1}_label`, type: 'text', x: 34 + i * 34, y: 761, width: 26, height: 10, text: 'LOGO', fontSize: 5, color: '#9FB8D0', align: 'center', fontFamily: 'sans',
   })),
-  { id: 'control_box', type: 'shape', shape: 'rect', x: 402, y: 752, width: 180, height: 22, fillColor: RED },
+  { id: 'control_box', type: 'shape', shape: 'rect', x: 402, y: 752, width: 180, height: 22, fillColor: STAMP },
   { id: 'control_label', type: 'text', x: 407, y: 756, width: 170, height: 10, text: 'CERTIFICATE CONTROL NO.', fontSize: 7, bold: true, color: '#FFFFFF', align: 'center', fontFamily: 'sans' },
   { id: 'control_value', type: 'text', x: 407, y: 778, width: 170, height: 12, text: '{{control_no}}', fontSize: 8, color: INK, align: 'center', fontFamily: 'sans' },
 ];
 
-const TITLE_ELEMENT = { id: 'title', type: 'text', x: 0, y: 158, width: 612, height: 40, text: 'Certificate of Recognition', fontSize: 30, bold: true, italics: true, color: '#111111', align: 'center', fontFamily: 'serif' };
+const TITLE_ELEMENT = { id: 'title', type: 'text', x: 0, y: 158, width: 612, height: 40, text: 'Certificate of Recognition', fontSize: 30, bold: true, italics: true, color: NAVY, align: 'center', fontFamily: 'serif' };
+const APPRECIATION_TITLE_ELEMENT = { ...TITLE_ELEMENT, text: 'Certificate of Appreciation' };
 
-// Guest speakers have no grade/section, so the subtitle line under their
+// Speakers/lecturers have no grade/section, so the subtitle line under their
 // name shows their position/organization instead — {{position_line}} is a
 // composed mergeData field (see certificateGenerator.js) so this stays a
 // flat placeholder like everything else.
-const GUEST_SPEAKER_FRAME_ELEMENTS = FRAME_ELEMENTS.map((el) =>
+const SPEAKER_FRAME_ELEMENTS = FRAME_ELEMENTS.map((el) =>
   el.id === 'school_line' ? { ...el, text: '{{position_line}}' } : el
+);
+
+// Teachers likewise have no grade/section — the subtitle line shows their
+// role/department instead via the composed {{role_line}} field.
+const TEACHER_FRAME_ELEMENTS = FRAME_ELEMENTS.map((el) =>
+  el.id === 'school_line' ? { ...el, text: '{{role_line}}' } : el
 );
 
 const DEFAULT_TEMPLATES = {
@@ -86,15 +93,28 @@ const DEFAULT_TEMPLATES = {
       },
     ],
   },
-  guest_speaker: {
-    template_key: 'guest_speaker',
+  speaker: {
+    template_key: 'speaker',
     orientation: 'portrait',
     elements: [
       TITLE_ELEMENT,
-      ...GUEST_SPEAKER_FRAME_ELEMENTS,
+      ...SPEAKER_FRAME_ELEMENTS,
       {
         id: 'body', type: 'text', x: 90, y: 286, width: 432, height: 70,
-        text: 'In recognition of serving as a resource speaker on the topic of **{{topic}}** during the **{{event_name}}** held {{date_range}}{{venue_clause}}, and for generously sharing valuable insights and expertise with our students.',
+        text: 'In recognition of serving as a resource speaker/lecturer on the topic of **{{topic}}** during the **{{event_name}}** held {{date_range}}{{venue_clause}}, and for generously sharing valuable insights and expertise with our students.',
+        fontSize: 11.5, color: INK, align: 'justify', fontFamily: 'sans',
+      },
+    ],
+  },
+  teacher: {
+    template_key: 'teacher',
+    orientation: 'portrait',
+    elements: [
+      APPRECIATION_TITLE_ELEMENT,
+      ...TEACHER_FRAME_ELEMENTS,
+      {
+        id: 'body', type: 'text', x: 90, y: 286, width: 432, height: 70,
+        text: 'In recognition of your valuable participation and contribution as **{{role}}** during the **{{event_name}}** held {{date_range}}{{venue_clause}}, and for your dedicated service to campus journalism.',
         fontSize: 11.5, color: INK, align: 'justify', fontFamily: 'sans',
       },
     ],
