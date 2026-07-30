@@ -2,11 +2,15 @@ import { Component, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 import { ApiService } from '../../core/services/api.service';
-import { Category, Ranking, Student } from '../../core/models/models';
+import { Category, Ranking, RankPlace, Student } from '../../core/models/models';
 import { DocumentModalComponent } from '../../shared/components/document-modal/document-modal.component';
 import { PaginationComponent } from '../../shared/components/pagination/pagination.component';
 
-const RANK_LABELS: Record<number, string> = { 1: '1st Place', 2: '2nd Place', 3: '3rd Place' };
+const RANK_LABELS: Record<number, string> = {
+  1: '1st Place', 2: '2nd Place', 3: '3rd Place', 4: '4th Place', 5: '5th Place',
+  6: '6th Place', 7: '7th Place', 8: '8th Place', 9: '9th Place', 10: '10th Place',
+};
+const RANKS: RankPlace[] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 const PAGE_SIZE = 10;
 
 @Component({
@@ -16,7 +20,7 @@ const PAGE_SIZE = 10;
   template: `
     <div class="container">
       <h1 class="headline">Category Rankings</h1>
-      <p class="lede">Assign 1st, 2nd, and 3rd place per journalism category, then print each winner's Certificate of Recognition.</p>
+      <p class="lede">Assign 1st through 10th place per journalism category, then print each winner's Certificate of Recognition.</p>
 
       <div class="card assign-card">
         <h3 class="headline" style="font-size:1rem; margin-bottom:14px;">Assign a Ranking</h3>
@@ -57,9 +61,9 @@ const PAGE_SIZE = 10;
           <div>
             <label>Rank</label>
             <select [(ngModel)]="form.rank" name="rank">
-              <option [ngValue]="1">1st Place</option>
-              <option [ngValue]="2">2nd Place</option>
-              <option [ngValue]="3">3rd Place</option>
+              @for (r of ranks; track r) {
+                <option [ngValue]="r">{{ rankLabel(r) }}</option>
+              }
             </select>
           </div>
           <button class="btn btn-primary" (click)="assign()" [disabled]="!form.category_id || !form.student_id || saving()">
@@ -71,7 +75,12 @@ const PAGE_SIZE = 10;
       </div>
 
       <div class="card">
-        <h3 class="headline" style="font-size:1rem; margin-bottom:14px;">Current Rankings</h3>
+        <div class="card-head-row">
+          <h3 class="headline" style="font-size:1rem; margin-bottom:14px;">Current Rankings</h3>
+          <button class="btn btn-gold btn-sm" (click)="printAllTwoUp()" [disabled]="rankings().length === 0 || bulkPrinting()">
+            {{ bulkPrinting() ? 'Preparing…' : 'Print All (2 per sheet)' }}
+          </button>
+        </div>
         @if (loading()) {
           <p class="placeholder">Loading…</p>
         } @else {
@@ -122,6 +131,7 @@ const PAGE_SIZE = 10;
   styles: [`
     .lede { color: #666; margin: 6px 0 24px; }
     .assign-card { margin-bottom: 20px; }
+    .card-head-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
     .assign-row { display: grid; grid-template-columns: 1fr 1.4fr 0.8fr auto; gap: 12px; align-items: end; }
     .student-picker { position: relative; }
     .student-dropdown {
@@ -143,15 +153,18 @@ const PAGE_SIZE = 10;
   `],
 })
 export class RankingsComponent implements OnInit {
+  readonly ranks = RANKS;
+
   categories = signal<Category[]>([]);
   students = signal<Student[]>([]);
   rankings = signal<Ranking[]>([]);
   loading = signal(true);
   saving = signal(false);
+  bulkPrinting = signal(false);
   error = signal('');
   page = signal(1);
 
-  form: { category_id: number | null; student_id: string | null; rank: 1 | 2 | 3 } = {
+  form: { category_id: number | null; student_id: string | null; rank: RankPlace } = {
     category_id: null,
     student_id: null,
     rank: 1,
@@ -250,6 +263,21 @@ export class RankingsComponent implements OnInit {
   remove(r: Ranking) {
     if (!confirm(`Remove ${this.rankLabel(r.rank)} for ${r.category_name}?`)) return;
     this.api.deleteRanking(r.id).subscribe(() => this.load());
+  }
+
+  printAllTwoUp() {
+    this.bulkPrinting.set(true);
+    this.api.getRankingsBulkBlob('all').subscribe({
+      next: (blob) => {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'ranking-certificates-2up.pdf';
+        a.click();
+        URL.revokeObjectURL(url);
+      },
+      complete: () => this.bulkPrinting.set(false),
+    });
   }
 
   viewCertificate(r: Ranking) {

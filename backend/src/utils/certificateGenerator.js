@@ -13,7 +13,25 @@ pdfMake.setUrlAccessPolicy(() => false);
 const NAVY = '#2B6CB0';
 const INK = '#2D3748';
 
-const RANK_WORDS = { 1: 'FIRST', 2: 'SECOND', 3: 'THIRD' };
+const RANK_WORDS = {
+  1: 'FIRST', 2: 'SECOND', 3: 'THIRD', 4: 'FOURTH', 5: 'FIFTH',
+  6: 'SIXTH', 7: 'SEVENTH', 8: 'EIGHTH', 9: 'NINTH', 10: 'TENTH',
+};
+
+// Point dimensions (72pt/inch) for the three paper choices offered in the
+// certificate designer, given in PORTRAIT orientation — landscape swaps
+// width/height. "Short" and "Long" follow the Philippine school-supply
+// convention (Short = Letter, Long = 8.5in x 13in), not the US Legal size.
+const PAPER_SIZES = {
+  a4: { width: 595.28, height: 841.89 },
+  short: { width: 612, height: 792 },
+  long: { width: 612, height: 936 },
+};
+
+function pageDims(paperSize, orientation) {
+  const base = PAPER_SIZES[paperSize] || PAPER_SIZES.short;
+  return orientation === 'landscape' ? { width: base.height, height: base.width } : base;
+}
 
 function generateControlNo(prefix = 'PRESSCONF') {
   const year = new Date().getFullYear();
@@ -113,20 +131,38 @@ function renderImageElement(el, qrDataUrl) {
   return { image: dataUrl, width: el.width, height: el.height, absolutePosition: { x: el.x, y: el.y } };
 }
 
+// Proportionally scales and offsets a positioned-elements array — used to
+// shrink a full-page certificate design down to fit one half of a shared
+// sheet (see buildCertificateDocDefinitionMultiSheet). Mirrors the
+// frontend's rescaleElements() in certificate-template.component.ts.
+function scaleElements(elements, scale, offsetX, offsetY) {
+  return (elements || []).map((el) => ({
+    ...el,
+    x: el.x * scale + offsetX,
+    y: el.y * scale + offsetY,
+    width: el.width * scale,
+    height: el.height * scale,
+    fontSize: el.fontSize ? Math.max(4, el.fontSize * scale) : el.fontSize,
+    lineWidth: el.lineWidth != null ? Math.max(0.25, el.lineWidth * scale) : el.lineWidth,
+    cornerRadius: el.cornerRadius ? el.cornerRadius * scale : el.cornerRadius,
+  }));
+}
+
 /**
- * Builds a pdfmake docDefinition from a freely-positioned elements array —
- * each element is independently drawn at its own absolute box, so the
- * layout is entirely data-driven (edited via the certificate template
- * designer) rather than hardcoded here.
+ * Renders one certificate's elements array (already at whatever scale/offset
+ * the caller wants) into a pdfmake content array. Split out from
+ * buildCertificateDocDefinition so buildCertificateDocDefinitionMultiSheet
+ * can reuse it twice per sheet without duplicating the element-rendering
+ * logic.
  */
-async function buildCertificateDocDefinition({ elements, mergeData, qrToken, controlNo, orientation }) {
+async function buildCertificateContentNodes(elements, mergeData, qrToken, controlNo) {
   const list = elements || [];
   // Only generate the QR image when something in the layout actually needs
   // it — most certificates no longer include one.
   const needsQr = list.some((el) => el.type === 'image' && el.source === 'qr');
   const qrDataUrl = needsQr ? await generateQrDataUrl(qrToken || controlNo) : null;
 
-  const content = list
+  return list
     .map((el) => {
       if (el.type === 'text') return renderTextElement(el, mergeData);
       if (el.type === 'shape') return renderShapeElement(el);
@@ -134,10 +170,64 @@ async function buildCertificateDocDefinition({ elements, mergeData, qrToken, con
       return null;
     })
     .filter(Boolean);
+}
+
+/**
+ * Builds a pdfmake docDefinition from a freely-positioned elements array —
+ * each element is independently drawn at its own absolute box, so the
+ * layout is entirely data-driven (edited via the certificate template
+ * designer) rather than hardcoded here.
+ */
+async function buildCertificateDocDefinition({ elements, mergeData, qrToken, controlNo, orientation, paperSize }) {
+  const content = await buildCertificateContentNodes(elements, mergeData, qrToken, controlNo);
+  const { width, height } = pageDims(paperSize, orientation);
 
   return {
-    pageSize: 'LETTER',
-    pageOrientation: orientation === 'landscape' ? 'landscape' : 'portrait',
+    pageSize: { width, height },
+    pageMargins: 0,
+    defaultStyle: { font: 'Roboto', fontSize: 11 },
+    content,
+  };
+}
+
+/**
+ * Lays out many already-built certificate entries two-per-sheet (stacked
+ * top/bottom, each scaled to half size, with a dashed cut-line between) on
+ * the SAME physical paper size/orientation the template is configured for —
+ * not a doubled sheet — so printing certificates for a whole class uses half
+ * as much bond paper. `entries` is a flat list of
+ * `{ elements, mergeData, qrToken, controlNo }`; consecutive pairs share a
+ * sheet, and a trailing odd entry gets a sheet to itself (blank bottom half).
+ */
+async function buildCertificateDocDefinitionMultiSheet(entries, { paperSize, orientation }) {
+  const { width, height } = pageDims(paperSize, orientation);
+  const slotHeight = height / 2;
+  const scale = 0.5;
+  const offsetX = width * 0.25;
+
+  const content = [];
+  for (let i = 0; i < entries.length; i += 2) {
+    const [a, b] = [entries[i], entries[i + 1]];
+    const sheetContent = [];
+    if (content.length > 0) sheetContent.push({ text: '', pageBreak: 'before' });
+
+    if (a) {
+      sheetContent.push(...await buildCertificateContentNodes(scaleElements(a.elements, scale, offsetX, 0), a.mergeData, a.qrToken, a.controlNo));
+    }
+    if (b) {
+      sheetContent.push(...await buildCertificateContentNodes(scaleElements(b.elements, scale, offsetX, slotHeight), b.mergeData, b.qrToken, b.controlNo));
+    }
+
+    sheetContent.push({
+      canvas: [{ type: 'line', x1: 20, y1: slotHeight, x2: width - 20, y2: slotHeight, lineColor: '#cccccc', dash: { length: 4, space: 3 }, lineWidth: 0.75 }],
+      absolutePosition: { x: 0, y: 0 },
+    });
+
+    content.push(...sheetContent);
+  }
+
+  return {
+    pageSize: { width, height },
     pageMargins: 0,
     defaultStyle: { font: 'Roboto', fontSize: 11 },
     content,
@@ -151,14 +241,10 @@ async function streamPdf(docDefinition, res) {
   stream.end();
 }
 
-/**
- * Certificate of Recognition — completion award for students who finished
- * 6+ journalism categories across the Friday press conference sessions.
- */
-async function renderCertificatePdf({
+function buildCompletionMergeData({
   student, categoriesCompleted, schoolName, divisionName, dateRange,
-  officeLine, venue, signatoryName, signatoryTitle, controlNo, template, customFields,
-}, res) {
+  officeLine, venue, signatoryName, signatoryTitle, controlNo, customFields,
+}) {
   const finalControlNo = controlNo || generateControlNo('PRESSCONF-COMP');
   const mergeData = applyCustomFields({
     full_name: student.full_name,
@@ -175,26 +261,33 @@ async function renderCertificatePdf({
     signatory_title: signatoryTitle || 'School Principal / Head Teacher',
     control_no: finalControlNo,
   }, customFields);
+  return { mergeData, controlNo: finalControlNo };
+}
 
+/**
+ * Certificate of Recognition — completion award for students who finished
+ * 6+ journalism categories across the Friday press conference sessions.
+ */
+async function renderCertificatePdf(opts, res) {
+  const { student, template } = opts;
+  const { mergeData, controlNo } = buildCompletionMergeData(opts);
   const tpl = template || DEFAULT_TEMPLATES.completion;
   const docDefinition = await buildCertificateDocDefinition({
     elements: tpl.elements,
     orientation: tpl.orientation,
+    paperSize: tpl.paper_size,
     mergeData,
     qrToken: student.qr_token,
-    controlNo: finalControlNo,
+    controlNo,
   });
 
   await streamPdf(docDefinition, res);
 }
 
-/**
- * Certificate of Recognition — per-category ranking award (1st/2nd/3rd).
- */
-async function renderRankingCertificatePdf({
+function buildRankingMergeData({
   student, categoryName, rank, eventName, dateRange, venue,
-  schoolName, officeLine, signatoryName, signatoryTitle, controlNo, template, customFields,
-}, res) {
+  schoolName, officeLine, signatoryName, signatoryTitle, controlNo, customFields,
+}) {
   const finalControlNo = controlNo || generateControlNo('PRESSCONF-RANK');
   const mergeData = applyCustomFields({
     full_name: student.full_name,
@@ -213,27 +306,31 @@ async function renderRankingCertificatePdf({
     signatory_title: signatoryTitle || 'School Principal / Head Teacher',
     control_no: finalControlNo,
   }, customFields);
+  return { mergeData, controlNo: finalControlNo };
+}
 
+/**
+ * Certificate of Recognition — per-category ranking award (1st through 10th).
+ */
+async function renderRankingCertificatePdf(opts, res) {
+  const { student, template } = opts;
+  const { mergeData, controlNo } = buildRankingMergeData(opts);
   const tpl = template || DEFAULT_TEMPLATES.ranking;
   const docDefinition = await buildCertificateDocDefinition({
     elements: tpl.elements,
     orientation: tpl.orientation,
+    paperSize: tpl.paper_size,
     mergeData,
     qrToken: student.qr_token,
-    controlNo: finalControlNo,
+    controlNo,
   });
 
   await streamPdf(docDefinition, res);
 }
 
-/**
- * Certificate of Recognition — speakers/lecturers invited to the press
- * conference (no grade/section/QR; the subtitle line shows their
- * position/organization instead via the composed {{position_line}} field).
- */
-async function renderSpeakerCertificatePdf({
-  speaker, eventName, dateRange, venue, officeLine, signatoryName, signatoryTitle, controlNo, template, customFields,
-}, res) {
+function buildSpeakerMergeData({
+  speaker, eventName, dateRange, venue, officeLine, signatoryName, signatoryTitle, controlNo, customFields,
+}) {
   const finalControlNo = controlNo || generateControlNo('PRESSCONF-SPEAKER');
   const mergeData = applyCustomFields({
     full_name: speaker.full_name,
@@ -251,28 +348,32 @@ async function renderSpeakerCertificatePdf({
     signatory_title: signatoryTitle || 'School Principal / Head Teacher',
     control_no: finalControlNo,
   }, customFields);
+  return { mergeData, controlNo: finalControlNo };
+}
 
+/**
+ * Certificate of Recognition — speakers/lecturers invited to the press
+ * conference (no grade/section/QR; the subtitle line shows their
+ * position/organization instead via the composed {{position_line}} field).
+ */
+async function renderSpeakerCertificatePdf(opts, res) {
+  const { template } = opts;
+  const { mergeData, controlNo } = buildSpeakerMergeData(opts);
   const tpl = template || DEFAULT_TEMPLATES.speaker;
   const docDefinition = await buildCertificateDocDefinition({
     elements: tpl.elements,
     orientation: tpl.orientation,
+    paperSize: tpl.paper_size,
     mergeData,
-    controlNo: finalControlNo,
+    controlNo,
   });
 
   await streamPdf(docDefinition, res);
 }
 
-/**
- * Certificate of Appreciation — teachers who participated in running the
- * press conference (facilitator, judge, coordinator, reactor, etc.), issued
- * exclusively to them and distinct from the student/speaker certificates
- * (no grade/section/QR; the subtitle line shows their role/department
- * instead via the composed {{role_line}} field).
- */
-async function renderTeacherCertificatePdf({
-  teacher, eventName, dateRange, venue, officeLine, signatoryName, signatoryTitle, controlNo, template, customFields,
-}, res) {
+function buildTeacherMergeData({
+  teacher, eventName, dateRange, venue, officeLine, signatoryName, signatoryTitle, controlNo, customFields,
+}) {
   const finalControlNo = controlNo || generateControlNo('PRESSCONF-TEACHER');
   const mergeData = applyCustomFields({
     full_name: teacher.full_name,
@@ -290,13 +391,26 @@ async function renderTeacherCertificatePdf({
     signatory_title: signatoryTitle || 'School Principal / Head Teacher',
     control_no: finalControlNo,
   }, customFields);
+  return { mergeData, controlNo: finalControlNo };
+}
 
+/**
+ * Certificate of Appreciation — teachers who participated in running the
+ * press conference (facilitator, judge, coordinator, reactor, etc.), issued
+ * exclusively to them and distinct from the student/speaker certificates
+ * (no grade/section/QR; the subtitle line shows their role/department
+ * instead via the composed {{role_line}} field).
+ */
+async function renderTeacherCertificatePdf(opts, res) {
+  const { template } = opts;
+  const { mergeData, controlNo } = buildTeacherMergeData(opts);
   const tpl = template || DEFAULT_TEMPLATES.teacher;
   const docDefinition = await buildCertificateDocDefinition({
     elements: tpl.elements,
     orientation: tpl.orientation,
+    paperSize: tpl.paper_size,
     mergeData,
-    controlNo: finalControlNo,
+    controlNo,
   });
 
   await streamPdf(docDefinition, res);
@@ -307,8 +421,14 @@ module.exports = {
   renderRankingCertificatePdf,
   renderSpeakerCertificatePdf,
   renderTeacherCertificatePdf,
+  buildCompletionMergeData,
+  buildRankingMergeData,
+  buildSpeakerMergeData,
+  buildTeacherMergeData,
   generateControlNo,
   RANK_WORDS,
+  pageDims,
   buildCertificateDocDefinition,
+  buildCertificateDocDefinitionMultiSheet,
   streamPdf,
 };

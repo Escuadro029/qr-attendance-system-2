@@ -18,7 +18,12 @@ const PAGE_SIZE = 10;
           <h1 class="headline">Certificates</h1>
           <p class="lede">Students who completed {{ threshold() }} or more journalism categories qualify for a Certificate of Recognition.</p>
         </div>
-        <button class="btn btn-outline" (click)="viewSample()">Preview Sample Certificate</button>
+        <div class="head-actions">
+          <button class="btn btn-outline" (click)="viewSample()">Preview Sample Certificate</button>
+          <button class="btn btn-gold" (click)="printAllTwoUp()" [disabled]="qualified().length === 0 || bulkPrinting()">
+            {{ bulkPrinting() ? 'Preparing…' : 'Print All (2 per sheet)' }}
+          </button>
+        </div>
       </div>
 
       <div class="card">
@@ -70,6 +75,7 @@ const PAGE_SIZE = 10;
   `,
   styles: [`
     .head-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 24px; }
+    .head-actions { display: flex; gap: 10px; flex-wrap: wrap; }
     .lede { color: #666; margin: 6px 0 0; }
     .placeholder { color: #999; font-size: 0.85rem; text-align: center; padding: 20px 0; }
     .btn-sm { padding: 6px 12px; font-size: 0.8rem; }
@@ -80,6 +86,7 @@ export class CertificatesComponent implements OnInit {
   threshold = signal(6);
   loading = signal(true);
   downloadingId = signal<string | null>(null);
+  bulkPrinting = signal(false);
   page = signal(1);
 
   modalOpen = signal(false);
@@ -122,6 +129,21 @@ export class CertificatesComponent implements OnInit {
         URL.revokeObjectURL(url);
       },
       complete: () => this.downloadingId.set(null),
+    });
+  }
+
+  printAllTwoUp() {
+    this.bulkPrinting.set(true);
+    this.api.getCertificatesBulkBlob('all').subscribe({
+      next: (blob) => {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'certificates-2up.pdf';
+        a.click();
+        URL.revokeObjectURL(url);
+      },
+      complete: () => this.bulkPrinting.set(false),
     });
   }
 

@@ -64,7 +64,7 @@ CREATE TABLE IF NOT EXISTS attendance (
   UNIQUE (student_id, category_id, attendance_date)
 );
 
--- Per-category ranking (1st / 2nd / 3rd place), used to generate
+-- Per-category ranking (1st through 10th place), used to generate
 -- "Certificate of Recognition" awards distinct from the completion
 -- certificate. Only one student can hold a given rank per category.
 CREATE TABLE IF NOT EXISTS category_rankings (
@@ -72,7 +72,7 @@ CREATE TABLE IF NOT EXISTS category_rankings (
   tenant_id     UUID NOT NULL REFERENCES tenants(id),
   category_id   INT  NOT NULL REFERENCES categories(id) ON DELETE CASCADE,
   student_id    UUID NOT NULL REFERENCES students(id) ON DELETE CASCADE,
-  rank          INT  NOT NULL CHECK (rank IN (1, 2, 3)),
+  rank          INT  NOT NULL CHECK (rank BETWEEN 1 AND 10),
   control_no    VARCHAR(50),
   created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE (category_id, rank)
@@ -91,6 +91,7 @@ CREATE TABLE IF NOT EXISTS certificate_templates (
   template_key    VARCHAR(20) NOT NULL, -- 'completion' | 'ranking' | 'speaker' | 'teacher'
   elements        JSONB NOT NULL DEFAULT '[]',
   orientation     VARCHAR(20) NOT NULL DEFAULT 'portrait', -- 'portrait' | 'landscape'
+  paper_size      VARCHAR(20) NOT NULL DEFAULT 'short', -- 'a4' | 'short' (Letter) | 'long' (8.5x13in PH bond paper)
   updated_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE (tenant_id, template_key)
 );

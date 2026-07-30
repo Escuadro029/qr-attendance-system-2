@@ -1,3 +1,5 @@
+export type RankPlace = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10;
+
 export interface Ranking {
   id: string;
   category_id: number;
@@ -6,7 +8,7 @@ export interface Ranking {
   student_name: string;
   grade: string;
   section: string;
-  rank: 1 | 2 | 3;
+  rank: RankPlace;
   control_no: string;
   created_at: string;
 }
@@ -120,12 +122,14 @@ export interface CertificateElement {
 }
 
 export type CertificateOrientation = 'portrait' | 'landscape';
+export type CertificatePaperSize = 'a4' | 'short' | 'long';
 export type CertificateKey = 'completion' | 'ranking' | 'speaker' | 'teacher';
 
 export interface CertificateTemplate {
   template_key: CertificateKey;
   elements: CertificateElement[];
   orientation: CertificateOrientation;
+  paper_size: CertificatePaperSize;
   updated_at?: string;
 }
 

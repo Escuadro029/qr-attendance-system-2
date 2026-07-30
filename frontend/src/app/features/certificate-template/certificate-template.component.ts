@@ -3,24 +3,46 @@ import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 import { ApiService } from '../../core/services/api.service';
-import { CertificateElement, CertificateKey, CertificateOrientation, CertificateTemplate } from '../../core/models/models';
+import { CertificateElement, CertificateKey, CertificateOrientation, CertificatePaperSize, CertificateTemplate } from '../../core/models/models';
 import { DocumentModalComponent } from '../../shared/components/document-modal/document-modal.component';
 import { slugifyFieldName } from '../../core/utils/slugify';
 
 const SCALE = 0.72;
 const MIN_SIZE = 10;
-const PAGE_DIMS: Record<CertificateOrientation, { width: number; height: number }> = {
-  portrait: { width: 612, height: 792 },
-  landscape: { width: 792, height: 612 },
+
+// Point dimensions (72pt/inch) in PORTRAIT orientation — must match
+// backend/src/utils/certificateGenerator.js's PAPER_SIZES exactly, since the
+// saved coordinates are only meaningful relative to these page sizes.
+// "Short"/"Long" follow the Philippine school-supply convention (Short =
+// Letter, Long = 8.5in x 13in), not the US Legal size.
+const PAPER_SIZES: Record<CertificatePaperSize, { width: number; height: number }> = {
+  a4: { width: 595.28, height: 841.89 },
+  short: { width: 612, height: 792 },
+  long: { width: 612, height: 936 },
 };
 
-// Switching orientation swaps the page's aspect ratio — proportionally
-// rescaling every element keeps the layout in bounds (otherwise elements
-// authored for a 792-tall portrait page would spill onto a second page
-// once the physical page height shrinks to 612 in landscape).
-function rescaleElements(elements: CertificateElement[], from: CertificateOrientation, to: CertificateOrientation): CertificateElement[] {
-  const sx = PAGE_DIMS[to].width / PAGE_DIMS[from].width;
-  const sy = PAGE_DIMS[to].height / PAGE_DIMS[from].height;
+const PAPER_SIZE_LABELS: Record<CertificatePaperSize, string> = {
+  a4: 'A4',
+  short: 'Short (Letter)',
+  long: 'Long',
+};
+
+function pageDims(paperSize: CertificatePaperSize, orientation: CertificateOrientation): { width: number; height: number } {
+  const base = PAPER_SIZES[paperSize] || PAPER_SIZES.short;
+  return orientation === 'landscape' ? { width: base.height, height: base.width } : base;
+}
+
+// Switching paper size or orientation changes the page's dimensions —
+// proportionally rescaling every element keeps the layout in bounds
+// (otherwise elements authored for a tall page would spill onto a second
+// page once the physical page shrinks).
+function rescaleElements(
+  elements: CertificateElement[],
+  from: { width: number; height: number },
+  to: { width: number; height: number }
+): CertificateElement[] {
+  const sx = to.width / from.width;
+  const sy = to.height / from.height;
   return elements.map((el) => ({
     ...el,
     x: Math.round(el.x * sx),
@@ -94,6 +116,11 @@ let nextId = 0;
         <div class="orientation-toggle">
           <button class="chip-btn" [class.active]="orientation() === 'portrait'" (click)="setOrientation('portrait')">Portrait</button>
           <button class="chip-btn" [class.active]="orientation() === 'landscape'" (click)="setOrientation('landscape')">Landscape</button>
+        </div>
+        <div class="orientation-toggle">
+          @for (p of paperSizes; track p) {
+            <button class="chip-btn" [class.active]="paperSize() === p" (click)="setPaperSize(p)">{{ paperSizeLabel(p) }}</button>
+          }
         </div>
         <button class="btn btn-outline btn-sm" (click)="addTextBox()">+ Add Text Box</button>
         <button class="btn btn-outline btn-sm" (click)="addLogo()">+ Add Logo</button>
@@ -340,6 +367,7 @@ export class CertificateTemplateComponent implements OnInit, OnDestroy {
   success = signal('');
   elements = signal<CertificateElement[]>([]);
   orientation = signal<CertificateOrientation>('portrait');
+  paperSize = signal<CertificatePaperSize>('short');
   selectedId = signal<string | null>(null);
   customFields = signal<{ tag: string; label: string }[]>([]);
 
@@ -402,18 +430,31 @@ export class CertificateTemplateComponent implements OnInit, OnDestroy {
     return 'var(--font-ui)';
   }
 
+  readonly paperSizes: CertificatePaperSize[] = ['a4', 'short', 'long'];
+
+  paperSizeLabel(p: CertificatePaperSize): string {
+    return PAPER_SIZE_LABELS[p];
+  }
+
   pageWidth(): number {
-    return PAGE_DIMS[this.orientation()].width;
+    return pageDims(this.paperSize(), this.orientation()).width;
   }
 
   pageHeight(): number {
-    return PAGE_DIMS[this.orientation()].height;
+    return pageDims(this.paperSize(), this.orientation()).height;
   }
 
   setOrientation(next: CertificateOrientation) {
     if (next === this.orientation()) return;
-    this.elements.set(rescaleElements(this.elements(), this.orientation(), next));
+    this.elements.set(rescaleElements(this.elements(), pageDims(this.paperSize(), this.orientation()), pageDims(this.paperSize(), next)));
     this.orientation.set(next);
+    this.selectedId.set(null);
+  }
+
+  setPaperSize(next: CertificatePaperSize) {
+    if (next === this.paperSize()) return;
+    this.elements.set(rescaleElements(this.elements(), pageDims(this.paperSize(), this.orientation()), pageDims(next, this.orientation())));
+    this.paperSize.set(next);
     this.selectedId.set(null);
   }
 
@@ -441,6 +482,7 @@ export class CertificateTemplateComponent implements OnInit, OnDestroy {
       next: (tpl: CertificateTemplate) => {
         this.elements.set(tpl.elements);
         this.orientation.set(tpl.orientation || 'portrait');
+        this.paperSize.set(tpl.paper_size || 'short');
       },
       error: () => this.error.set('Could not load the certificate template.'),
       complete: () => this.loading.set(false),
@@ -560,6 +602,7 @@ export class CertificateTemplateComponent implements OnInit, OnDestroy {
       next: (tpl: CertificateTemplate) => {
         this.elements.set(tpl.elements);
         this.orientation.set(tpl.orientation || 'portrait');
+        this.paperSize.set(tpl.paper_size || 'short');
         this.selectedId.set(null);
       },
       error: () => this.error.set('Could not load the default layout.'),
@@ -649,10 +692,11 @@ export class CertificateTemplateComponent implements OnInit, OnDestroy {
     this.saving.set(true);
     this.error.set('');
     this.success.set('');
-    this.api.saveCertificateTemplate(this.key(), { elements: this.elements(), orientation: this.orientation() }).subscribe({
+    this.api.saveCertificateTemplate(this.key(), { elements: this.elements(), orientation: this.orientation(), paper_size: this.paperSize() }).subscribe({
       next: (tpl: CertificateTemplate) => {
         this.elements.set(tpl.elements);
         this.orientation.set(tpl.orientation || 'portrait');
+        this.paperSize.set(tpl.paper_size || 'short');
         this.success.set('Template saved.');
       },
       error: (err) => this.error.set(err?.error?.error || 'Failed to save template.'),
@@ -667,7 +711,7 @@ export class CertificateTemplateComponent implements OnInit, OnDestroy {
     this.modalLoading.set(true);
     this.modalOpen.set(true);
     this.revokePreview();
-    this.api.previewCertificateTemplateBlob(this.key(), { elements: this.elements(), orientation: this.orientation() }).subscribe({
+    this.api.previewCertificateTemplateBlob(this.key(), { elements: this.elements(), orientation: this.orientation(), paper_size: this.paperSize() }).subscribe({
       next: (blob) => {
         this.previewBlob = blob;
         const url = URL.createObjectURL(blob);

@@ -1,7 +1,7 @@
 const express = require('express');
 const pool = require('../config/db');
 const { requireAuth } = require('../middleware/auth.middleware');
-const { renderCertificatePdf } = require('../utils/certificateGenerator');
+const { renderCertificatePdf, buildCompletionMergeData, buildCertificateDocDefinitionMultiSheet, streamPdf } = require('../utils/certificateGenerator');
 const { safeFilename } = require('../utils/safeFilename');
 const { getTemplate } = require('../utils/certificateTemplateStore');
 const { getSettings } = require('../utils/certificateSettingsStore');
@@ -48,6 +48,81 @@ router.get('/sample.pdf', requireAuth, async (req, res) => {
     signatoryTitle: settings.signatory_title,
     customFields: settings.custom_fields,
   }, res);
+});
+
+// GET /api/certificates/bulk.pdf?ids=uuid1,uuid2,...  (or ?ids=all)
+// Two-per-sheet printable pack: each qualified student's certificate is
+// scaled to half size and stacked with another's on one physical sheet
+// (same paper size/orientation as the saved template), with a dashed
+// cut-line between — halves the bond paper needed versus one page each.
+// Must be registered before /:studentId.pdf, which would otherwise treat
+// "bulk" as a studentId and shadow this route.
+router.get('/bulk.pdf', requireAuth, async (req, res) => {
+  try {
+    const idsParam = req.query.ids;
+    let result;
+    if (!idsParam || idsParam === 'all') {
+      result = await pool.query(
+        `SELECT s.*, COUNT(DISTINCT a.category_id)::int AS categories_completed
+         FROM students s
+         JOIN attendance a ON a.student_id = s.id
+         WHERE s.tenant_id = $1
+         GROUP BY s.id
+         HAVING COUNT(DISTINCT a.category_id) >= $2
+         ORDER BY s.grade, s.section, s.full_name`,
+        [req.user.tenant_id, QUALIFYING_THRESHOLD]
+      );
+    } else {
+      const ids = idsParam.split(',').filter(Boolean);
+      if (ids.length === 0) return res.status(400).json({ error: 'No student ids provided.' });
+      result = await pool.query(
+        `SELECT s.*, COUNT(DISTINCT a.category_id)::int AS categories_completed
+         FROM students s
+         JOIN attendance a ON a.student_id = s.id
+         WHERE s.id = ANY($1::uuid[]) AND s.tenant_id = $2
+         GROUP BY s.id
+         HAVING COUNT(DISTINCT a.category_id) >= $3
+         ORDER BY s.grade, s.section, s.full_name`,
+        [ids, req.user.tenant_id, QUALIFYING_THRESHOLD]
+      );
+    }
+
+    if (result.rowCount === 0) {
+      return res.status(400).json({ error: 'None of the selected students have qualified for a certificate yet.' });
+    }
+
+    const [template, settings] = await Promise.all([
+      getTemplate(req.user.tenant_id, 'completion'),
+      getSettings(req.user.tenant_id),
+    ]);
+
+    const entries = result.rows.map((student) => {
+      const { mergeData, controlNo } = buildCompletionMergeData({
+        student,
+        categoriesCompleted: student.categories_completed,
+        schoolName: student.school_name,
+        divisionName: req.query.division || settings.office_line,
+        dateRange: req.query.dates || settings.date_range,
+        venue: settings.venue,
+        signatoryName: settings.signatory_name,
+        signatoryTitle: settings.signatory_title,
+        customFields: settings.custom_fields,
+      });
+      return { elements: template.elements, mergeData, qrToken: student.qr_token, controlNo };
+    });
+
+    const docDefinition = await buildCertificateDocDefinitionMultiSheet(entries, {
+      paperSize: template.paper_size,
+      orientation: template.orientation,
+    });
+
+    res.set('Content-Type', 'application/pdf');
+    res.set('Content-Disposition', 'inline; filename="certificates-2up.pdf"');
+    await streamPdf(docDefinition, res);
+  } catch (err) {
+    console.error(err);
+    if (!res.headersSent) res.status(500).json({ error: 'Failed to generate certificate pack' });
+  }
 });
 
 // GET /api/certificates/:studentId.pdf -> generate certificate (only if qualified)

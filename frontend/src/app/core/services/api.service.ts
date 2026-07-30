@@ -2,7 +2,7 @@ import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
-import { Student, Category, ProgressRow, ScanResult, AttendanceRecord, AppUser, Ranking, CertificateTemplate, CertificateSettings, CertificateKey, Speaker, Teacher } from '../models/models';
+import { Student, Category, ProgressRow, ScanResult, AttendanceRecord, AppUser, Ranking, RankPlace, CertificateTemplate, CertificateSettings, CertificateKey, Speaker, Teacher } from '../models/models';
 
 @Injectable({ providedIn: 'root' })
 export class ApiService {
@@ -96,12 +96,19 @@ export class ApiService {
     return this.http.get(`${this.base}/certificates/sample.pdf`, { responseType: 'blob' });
   }
 
+  // Two-per-sheet printable pack (halves the bond paper needed) — pass an
+  // array of student ids, or omit/pass 'all' for every qualified student.
+  getCertificatesBulkBlob(ids?: string[] | 'all'): Observable<Blob> {
+    const idsParam = !ids || ids === 'all' ? 'all' : ids.join(',');
+    return this.http.get(`${this.base}/certificates/bulk.pdf?ids=${encodeURIComponent(idsParam)}`, { responseType: 'blob' });
+  }
+
   // Rankings (per-category 1st/2nd/3rd place)
   getRankings(): Observable<Ranking[]> {
     return this.http.get<Ranking[]>(`${this.base}/rankings`);
   }
 
-  setRanking(payload: { category_id: number; student_id: string; rank: 1 | 2 | 3 }): Observable<any> {
+  setRanking(payload: { category_id: number; student_id: string; rank: RankPlace }): Observable<any> {
     return this.http.post(`${this.base}/rankings`, payload);
   }
 
@@ -111,6 +118,13 @@ export class ApiService {
 
   getRankingCertificateBlob(rankingId: string): Observable<Blob> {
     return this.http.get(`${this.base}/rankings/${rankingId}/certificate.pdf`, { responseType: 'blob' });
+  }
+
+  // Two-per-sheet printable pack — pass an array of ranking ids, or
+  // omit/pass 'all' for every assigned ranking.
+  getRankingsBulkBlob(ids?: string[] | 'all'): Observable<Blob> {
+    const idsParam = !ids || ids === 'all' ? 'all' : ids.join(',');
+    return this.http.get(`${this.base}/rankings/bulk.pdf?ids=${encodeURIComponent(idsParam)}`, { responseType: 'blob' });
   }
 
   // Certificate templates (admin-only visual designer)
@@ -156,6 +170,13 @@ export class ApiService {
     return this.http.get(`${this.base}/speakers/${id}/certificate.pdf`, { responseType: 'blob' });
   }
 
+  // Two-per-sheet printable pack — pass an array of speaker ids, or
+  // omit/pass 'all' for every registered speaker.
+  getSpeakersBulkBlob(ids?: string[] | 'all'): Observable<Blob> {
+    const idsParam = !ids || ids === 'all' ? 'all' : ids.join(',');
+    return this.http.get(`${this.base}/speakers/bulk.pdf?ids=${encodeURIComponent(idsParam)}`, { responseType: 'blob' });
+  }
+
   // Teachers (participation entries, distinct from login accounts in Users)
   registerTeacher(payload: Partial<Teacher>): Observable<Teacher> {
     return this.http.post<Teacher>(`${this.base}/teachers`, payload);
@@ -171,5 +192,12 @@ export class ApiService {
 
   getTeacherCertificateBlob(id: string): Observable<Blob> {
     return this.http.get(`${this.base}/teachers/${id}/certificate.pdf`, { responseType: 'blob' });
+  }
+
+  // Two-per-sheet printable pack — pass an array of teacher ids, or
+  // omit/pass 'all' for every registered teacher.
+  getTeachersBulkBlob(ids?: string[] | 'all'): Observable<Blob> {
+    const idsParam = !ids || ids === 'all' ? 'all' : ids.join(',');
+    return this.http.get(`${this.base}/teachers/bulk.pdf?ids=${encodeURIComponent(idsParam)}`, { responseType: 'blob' });
   }
 }

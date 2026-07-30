@@ -10,6 +10,7 @@ const router = express.Router();
 const MAX_ELEMENTS = 60;
 const VALID_ELEMENT_TYPES = ['text', 'shape', 'image'];
 const VALID_ORIENTATIONS = ['portrait', 'landscape'];
+const VALID_PAPER_SIZES = ['a4', 'short', 'long'];
 const MAX_IMAGE_DATA_LENGTH = 500_000; // ~375KB decoded — plenty for a small logo
 
 function isValidKey(key) {
@@ -18,6 +19,10 @@ function isValidKey(key) {
 
 function normalizeOrientation(orientation) {
   return VALID_ORIENTATIONS.includes(orientation) ? orientation : 'portrait';
+}
+
+function normalizePaperSize(paperSize) {
+  return VALID_PAPER_SIZES.includes(paperSize) ? paperSize : 'short';
 }
 
 function isValidElements(elements) {
@@ -76,7 +81,13 @@ router.put('/:key', requireAuth, requireAdmin, async (req, res) => {
   }
 
   try {
-    res.json(await saveTemplate(req.user.tenant_id, key, req.body.elements, normalizeOrientation(req.body.orientation)));
+    res.json(await saveTemplate(
+      req.user.tenant_id,
+      key,
+      req.body.elements,
+      normalizeOrientation(req.body.orientation),
+      normalizePaperSize(req.body.paper_size)
+    ));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to save certificate template' });
@@ -94,7 +105,11 @@ router.post('/:key/preview.pdf', requireAuth, requireAdmin, async (req, res) => 
     return res.status(400).json({ error: `elements must be a non-empty array of valid positioned elements (max ${MAX_ELEMENTS})` });
   }
 
-  const template = { elements: req.body.elements, orientation: normalizeOrientation(req.body.orientation) };
+  const template = {
+    elements: req.body.elements,
+    orientation: normalizeOrientation(req.body.orientation),
+    paper_size: normalizePaperSize(req.body.paper_size),
+  };
   const sampleStudent = { full_name: 'Juan Dela Cruz', grade: '10', section: 'Rizal', qr_token: 'sample-preview-token' };
 
   res.set('Content-Type', 'application/pdf');

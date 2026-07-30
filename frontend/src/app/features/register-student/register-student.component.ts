@@ -97,7 +97,12 @@ type Mode = 'student' | 'speaker' | 'teacher';
           </form>
 
           <div class="card">
-            <h3 class="headline" style="font-size:1rem; margin-bottom:12px;">Registered Speakers/Lecturers</h3>
+            <div class="card-head-row">
+              <h3 class="headline" style="font-size:1rem; margin-bottom:12px;">Registered Speakers/Lecturers</h3>
+              <button class="btn btn-gold btn-sm" (click)="printAllSpeakersTwoUp()" [disabled]="speakers().length === 0 || speakerBulkPrinting()">
+                {{ speakerBulkPrinting() ? 'Preparing…' : 'Print All (2 per sheet)' }}
+              </button>
+            </div>
             @if (speakersLoading()) {
               <p class="placeholder">Loading…</p>
             } @else {
@@ -150,7 +155,12 @@ type Mode = 'student' | 'speaker' | 'teacher';
           </form>
 
           <div class="card">
-            <h3 class="headline" style="font-size:1rem; margin-bottom:12px;">Registered Teachers</h3>
+            <div class="card-head-row">
+              <h3 class="headline" style="font-size:1rem; margin-bottom:12px;">Registered Teachers</h3>
+              <button class="btn btn-gold btn-sm" (click)="printAllTeachersTwoUp()" [disabled]="teachers().length === 0 || teacherBulkPrinting()">
+                {{ teacherBulkPrinting() ? 'Preparing…' : 'Print All (2 per sheet)' }}
+              </button>
+            </div>
             @if (teachersLoading()) {
               <p class="placeholder">Loading…</p>
             } @else {
@@ -193,6 +203,7 @@ type Mode = 'student' | 'speaker' | 'teacher';
   `,
   styles: [`
     .type-tabs { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; }
+    .card-head-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
     .lede { color: #666; margin: 6px 0 24px; }
     .grid { display: grid; grid-template-columns: 1fr 320px; gap: 20px; align-items: start; }
     .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
@@ -225,6 +236,7 @@ export class RegisterStudentComponent implements OnInit {
   speakerError = signal('');
   speakers = signal<Speaker[]>([]);
   speakersLoading = signal(true);
+  speakerBulkPrinting = signal(false);
 
   // Teacher participation registration
   teacherForm: Partial<Teacher> = { full_name: '', role: '', department: '', topic: '' };
@@ -232,6 +244,7 @@ export class RegisterStudentComponent implements OnInit {
   teacherError = signal('');
   teachers = signal<Teacher[]>([]);
   teachersLoading = signal(true);
+  teacherBulkPrinting = signal(false);
 
   // Certificate view modal (speaker/teacher)
   modalOpen = signal(false);
@@ -323,6 +336,21 @@ export class RegisterStudentComponent implements OnInit {
     this.api.deleteSpeaker(speaker.id).subscribe(() => this.loadSpeakers());
   }
 
+  printAllSpeakersTwoUp() {
+    this.speakerBulkPrinting.set(true);
+    this.api.getSpeakersBulkBlob('all').subscribe({
+      next: (blob) => {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'speaker-certificates-2up.pdf';
+        a.click();
+        URL.revokeObjectURL(url);
+      },
+      complete: () => this.speakerBulkPrinting.set(false),
+    });
+  }
+
   viewSpeakerCertificate(speaker: Speaker) {
     this.revokeCurrent();
     this.modalTitle.set(`${speaker.full_name} — Certificate of Recognition`);
@@ -370,6 +398,21 @@ export class RegisterStudentComponent implements OnInit {
   removeTeacher(teacher: Teacher) {
     if (!confirm(`Remove ${teacher.full_name} from teachers?`)) return;
     this.api.deleteTeacher(teacher.id).subscribe(() => this.loadTeachers());
+  }
+
+  printAllTeachersTwoUp() {
+    this.teacherBulkPrinting.set(true);
+    this.api.getTeachersBulkBlob('all').subscribe({
+      next: (blob) => {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'teacher-certificates-2up.pdf';
+        a.click();
+        URL.revokeObjectURL(url);
+      },
+      complete: () => this.teacherBulkPrinting.set(false),
+    });
   }
 
   viewTeacherCertificate(teacher: Teacher) {

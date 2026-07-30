@@ -70,6 +70,7 @@ const DEFAULT_TEMPLATES = {
   completion: {
     template_key: 'completion',
     orientation: 'portrait',
+    paper_size: 'short',
     elements: [
       TITLE_ELEMENT,
       ...FRAME_ELEMENTS,
@@ -83,6 +84,7 @@ const DEFAULT_TEMPLATES = {
   ranking: {
     template_key: 'ranking',
     orientation: 'portrait',
+    paper_size: 'short',
     elements: [
       TITLE_ELEMENT,
       ...FRAME_ELEMENTS,
@@ -96,6 +98,7 @@ const DEFAULT_TEMPLATES = {
   speaker: {
     template_key: 'speaker',
     orientation: 'portrait',
+    paper_size: 'short',
     elements: [
       TITLE_ELEMENT,
       ...SPEAKER_FRAME_ELEMENTS,
@@ -109,6 +112,7 @@ const DEFAULT_TEMPLATES = {
   teacher: {
     template_key: 'teacher',
     orientation: 'portrait',
+    paper_size: 'short',
     elements: [
       APPRECIATION_TITLE_ELEMENT,
       ...TEACHER_FRAME_ELEMENTS,

@@ -1,7 +1,7 @@
 const express = require('express');
 const pool = require('../config/db');
 const { requireAuth } = require('../middleware/auth.middleware');
-const { renderTeacherCertificatePdf } = require('../utils/certificateGenerator');
+const { renderTeacherCertificatePdf, buildTeacherMergeData, buildCertificateDocDefinitionMultiSheet, streamPdf } = require('../utils/certificateGenerator');
 const { safeFilename } = require('../utils/safeFilename');
 const { getTemplate } = require('../utils/certificateTemplateStore');
 const { getSettings } = require('../utils/certificateSettingsStore');
@@ -54,6 +54,61 @@ router.delete('/:id', requireAuth, async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to delete teacher' });
+  }
+});
+
+// GET /api/teachers/bulk.pdf?ids=uuid1,uuid2,...  (or ?ids=all)
+// Two-per-sheet printable pack, same idea as /api/certificates/bulk.pdf —
+// halves the bond paper needed when printing many teacher certificates.
+router.get('/bulk.pdf', requireAuth, async (req, res) => {
+  try {
+    const idsParam = req.query.ids;
+    let result;
+    if (!idsParam || idsParam === 'all') {
+      result = await pool.query('SELECT * FROM teachers WHERE tenant_id = $1 ORDER BY created_at DESC', [
+        req.user.tenant_id,
+      ]);
+    } else {
+      const ids = idsParam.split(',').filter(Boolean);
+      if (ids.length === 0) return res.status(400).json({ error: 'No teacher ids provided.' });
+      result = await pool.query('SELECT * FROM teachers WHERE id = ANY($1::uuid[]) AND tenant_id = $2', [
+        ids,
+        req.user.tenant_id,
+      ]);
+    }
+
+    if (result.rowCount === 0) return res.status(400).json({ error: 'No matching teachers found.' });
+
+    const [template, settings] = await Promise.all([
+      getTemplate(req.user.tenant_id, 'teacher'),
+      getSettings(req.user.tenant_id),
+    ]);
+
+    const entries = result.rows.map((teacher) => {
+      const { mergeData, controlNo } = buildTeacherMergeData({
+        teacher,
+        eventName: req.query.event || 'School Press Conference',
+        dateRange: req.query.dates || settings.date_range,
+        venue: req.query.venue || settings.venue,
+        officeLine: req.query.division || settings.office_line,
+        signatoryName: req.query.signatory || settings.signatory_name,
+        signatoryTitle: req.query.signatoryTitle || settings.signatory_title,
+        customFields: settings.custom_fields,
+      });
+      return { elements: template.elements, mergeData, controlNo };
+    });
+
+    const docDefinition = await buildCertificateDocDefinitionMultiSheet(entries, {
+      paperSize: template.paper_size,
+      orientation: template.orientation,
+    });
+
+    res.set('Content-Type', 'application/pdf');
+    res.set('Content-Disposition', 'inline; filename="teacher-certificates-2up.pdf"');
+    await streamPdf(docDefinition, res);
+  } catch (err) {
+    console.error(err);
+    if (!res.headersSent) res.status(500).json({ error: 'Failed to generate teacher certificate pack' });
   }
 });
 
