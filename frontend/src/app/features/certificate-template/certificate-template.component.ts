@@ -215,6 +215,8 @@ let nextId = 0;
                   <button type="button" class="chip-btn" [class.active]="!el.fontFamily || el.fontFamily === 'sans'" (click)="updateElement(el.id, { fontFamily: 'sans' })">Sans</button>
                   <button type="button" class="chip-btn" [class.active]="el.fontFamily === 'serif'" (click)="updateElement(el.id, { fontFamily: 'serif' })">Serif</button>
                   <button type="button" class="chip-btn" [class.active]="el.fontFamily === 'oldenglish'" (click)="updateElement(el.id, { fontFamily: 'oldenglish' })">Old English</button>
+                  <button type="button" class="chip-btn" [class.active]="el.fontFamily === 'trajanpro'" (click)="updateElement(el.id, { fontFamily: 'trajanpro' })">Trajan Pro</button>
+                  <button type="button" class="chip-btn" [class.active]="el.fontFamily === 'tahoma'" (click)="updateElement(el.id, { fontFamily: 'tahoma' })">Tahoma</button>
                   <label class="color-label">Color <input type="color" [ngModel]="el.color || '#2D3748'" (ngModelChange)="updateElement(el.id, { color: $event })" /></label>
                 </div>
               }
@@ -395,6 +397,8 @@ export class CertificateTemplateComponent implements OnInit, OnDestroy {
   fontFamilyCss(fontFamily: CertificateElement['fontFamily']): string {
     if (fontFamily === 'serif') return 'var(--font-headline)';
     if (fontFamily === 'oldenglish') return 'var(--font-oldenglish)';
+    if (fontFamily === 'trajanpro') return 'var(--font-trajanpro)';
+    if (fontFamily === 'tahoma') return 'var(--font-tahoma)';
     return 'var(--font-ui)';
   }
 

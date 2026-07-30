@@ -107,7 +107,7 @@ export interface CertificateElement {
   uppercase?: boolean;
   color?: string;
   align?: 'left' | 'center' | 'right' | 'justify';
-  fontFamily?: 'serif' | 'sans' | 'oldenglish';
+  fontFamily?: 'serif' | 'sans' | 'oldenglish' | 'trajanpro' | 'tahoma';
   // shape
   shape?: CertificateShapeKind;
   lineColor?: string;

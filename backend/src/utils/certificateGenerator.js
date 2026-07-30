@@ -52,6 +52,8 @@ function applyCustomFields(mergeData, customFields) {
 function fontNameFor(fontFamily) {
   if (fontFamily === 'serif') return 'Tinos';
   if (fontFamily === 'oldenglish') return 'OldEnglish';
+  if (fontFamily === 'trajanpro') return 'TrajanPro';
+  if (fontFamily === 'tahoma') return 'Tahoma';
   return 'Roboto';
 }
 
