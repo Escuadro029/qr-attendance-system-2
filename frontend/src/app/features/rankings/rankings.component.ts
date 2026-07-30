@@ -30,14 +30,29 @@ const PAGE_SIZE = 10;
               }
             </select>
           </div>
-          <div>
+          <div class="student-picker">
             <label>Student</label>
-            <select [(ngModel)]="form.student_id" name="student_id">
-              <option [ngValue]="null" disabled>Select student…</option>
-              @for (s of students(); track s.id) {
-                <option [ngValue]="s.id">{{ s.full_name }} (Grade {{ s.grade }} - {{ s.section }})</option>
-              }
-            </select>
+            <input
+              type="text"
+              placeholder="Search by name or student ID…"
+              [ngModel]="studentQuery()"
+              (ngModelChange)="onStudentQueryChange($event)"
+              name="student_search"
+              autocomplete="off"
+              (focus)="studentDropdownOpen.set(true)"
+              (blur)="onStudentInputBlur()"
+            />
+            @if (studentDropdownOpen()) {
+              <div class="student-dropdown">
+                @for (s of filteredStudents(); track s.id) {
+                  <div class="student-option" (mousedown)="$event.preventDefault(); selectStudent(s)">
+                    {{ s.full_name }} — Grade {{ s.grade }} - {{ s.section }}{{ s.student_id_no ? ' (' + s.student_id_no + ')' : '' }}
+                  </div>
+                } @empty {
+                  <div class="student-option placeholder">No matching students.</div>
+                }
+              </div>
+            }
           </div>
           <div>
             <label>Rank</label>
@@ -108,6 +123,17 @@ const PAGE_SIZE = 10;
     .lede { color: #666; margin: 6px 0 24px; }
     .assign-card { margin-bottom: 20px; }
     .assign-row { display: grid; grid-template-columns: 1fr 1.4fr 0.8fr auto; gap: 12px; align-items: end; }
+    .student-picker { position: relative; }
+    .student-dropdown {
+      position: absolute; top: 100%; left: 0; right: 0; z-index: 20;
+      max-height: 220px; overflow-y: auto; margin-top: 4px;
+      background: var(--paper-card); border: 1px solid var(--border); border-radius: 8px;
+      box-shadow: var(--shadow);
+    }
+    .student-option { padding: 8px 12px; font-size: 0.88rem; cursor: pointer; }
+    .student-option:hover { background: var(--paper); }
+    .student-option.placeholder { color: #999; cursor: default; }
+    .student-option.placeholder:hover { background: transparent; }
     .hint { font-size: 0.78rem; color: #999; margin-top: 10px; }
     .error { color: var(--danger); font-size: 0.85rem; margin-top: 10px; }
     .placeholder { color: #999; font-size: 0.85rem; text-align: center; padding: 20px 0; }
@@ -130,6 +156,9 @@ export class RankingsComponent implements OnInit {
     student_id: null,
     rank: 1,
   };
+
+  studentQuery = signal('');
+  studentDropdownOpen = signal(false);
 
   modalOpen = signal(false);
   modalTitle = signal('');
@@ -171,6 +200,34 @@ export class RankingsComponent implements OnInit {
     return RANK_LABELS[rank] || `Rank ${rank}`;
   }
 
+  // Plain method (not a computed signal) so it re-evaluates on every change
+  // detection pass, including when `studentQuery` changes via ngModel.
+  filteredStudents(): Student[] {
+    const term = this.studentQuery().trim().toLowerCase();
+    if (!term) return this.students();
+    return this.students().filter(
+      (s) => s.full_name.toLowerCase().includes(term) || (s.student_id_no ?? '').toLowerCase().includes(term)
+    );
+  }
+
+  onStudentQueryChange(value: string) {
+    this.studentQuery.set(value);
+    this.studentDropdownOpen.set(true);
+    this.form.student_id = null;
+  }
+
+  selectStudent(s: Student) {
+    this.form.student_id = s.id;
+    this.studentQuery.set(s.full_name);
+    this.studentDropdownOpen.set(false);
+  }
+
+  // Delayed so a click on a dropdown option (which also blurs the input)
+  // still registers before the dropdown disappears.
+  onStudentInputBlur() {
+    setTimeout(() => this.studentDropdownOpen.set(false), 150);
+  }
+
   assign() {
     if (!this.form.category_id || !this.form.student_id) return;
     this.saving.set(true);
@@ -182,6 +239,7 @@ export class RankingsComponent implements OnInit {
     }).subscribe({
       next: () => {
         this.form.student_id = null;
+        this.studentQuery.set('');
         this.load();
       },
       error: (err) => this.error.set(err?.error?.error || 'Failed to save ranking.'),
