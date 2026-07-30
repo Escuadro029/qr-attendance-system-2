@@ -134,7 +134,7 @@ let nextId = 0;
                   @switch (el.type) {
                     @case ('text') {
                       <div class="el-text"
-                        [style.font-family]="el.fontFamily === 'serif' ? 'var(--font-headline)' : 'var(--font-ui)'"
+                        [style.font-family]="fontFamilyCss(el.fontFamily)"
                         [style.font-size.px]="(el.fontSize || 11) * SCALE"
                         [style.font-weight]="el.bold ? 700 : 400"
                         [style.font-style]="el.italics ? 'italic' : 'normal'"
@@ -212,8 +212,9 @@ let nextId = 0;
                   }
                 </div>
                 <div class="style-row">
-                  <button type="button" class="chip-btn" [class.active]="el.fontFamily !== 'serif'" (click)="updateElement(el.id, { fontFamily: 'sans' })">Sans</button>
+                  <button type="button" class="chip-btn" [class.active]="!el.fontFamily || el.fontFamily === 'sans'" (click)="updateElement(el.id, { fontFamily: 'sans' })">Sans</button>
                   <button type="button" class="chip-btn" [class.active]="el.fontFamily === 'serif'" (click)="updateElement(el.id, { fontFamily: 'serif' })">Serif</button>
+                  <button type="button" class="chip-btn" [class.active]="el.fontFamily === 'oldenglish'" (click)="updateElement(el.id, { fontFamily: 'oldenglish' })">Old English</button>
                   <label class="color-label">Color <input type="color" [ngModel]="el.color || '#2D3748'" (ngModelChange)="updateElement(el.id, { color: $event })" /></label>
                 </div>
               }
@@ -389,6 +390,12 @@ export class CertificateTemplateComponent implements OnInit, OnDestroy {
 
   round(n: number): number {
     return Math.round(n);
+  }
+
+  fontFamilyCss(fontFamily: CertificateElement['fontFamily']): string {
+    if (fontFamily === 'serif') return 'var(--font-headline)';
+    if (fontFamily === 'oldenglish') return 'var(--font-oldenglish)';
+    return 'var(--font-ui)';
   }
 
   pageWidth(): number {

@@ -50,7 +50,9 @@ function applyCustomFields(mergeData, customFields) {
 }
 
 function fontNameFor(fontFamily) {
-  return fontFamily === 'serif' ? 'Tinos' : 'Roboto';
+  if (fontFamily === 'serif') return 'Tinos';
+  if (fontFamily === 'oldenglish') return 'OldEnglish';
+  return 'Roboto';
 }
 
 // Splits "plain **bold** plain" into pdfmake inline text runs — bold
