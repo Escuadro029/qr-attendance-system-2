@@ -14,6 +14,7 @@ const certificateTemplatesRoutes = require('./routes/certificateTemplates.routes
 const certificateSettingsRoutes = require('./routes/certificateSettings.routes');
 const speakersRoutes = require('./routes/speakers.routes');
 const teachersRoutes = require('./routes/teachers.routes');
+const uploadsRoutes = require('./routes/uploads.routes');
 
 const app = express();
 
@@ -65,6 +66,7 @@ app.use('/api/certificate-templates', certificateTemplatesRoutes);
 app.use('/api/certificate-settings', certificateSettingsRoutes);
 app.use('/api/speakers', speakersRoutes);
 app.use('/api/teachers', teachersRoutes);
+app.use('/api/uploads', uploadsRoutes);
 
 // 404
 app.use((req, res) => res.status(404).json({ error: 'Not found' }));

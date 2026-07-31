@@ -1,3 +1,4 @@
+const https = require('https');
 const pdfMake = require('pdfmake');
 const { generateQrDataUrl } = require('./qrGenerator');
 const { fonts } = require('./pdfFonts');
@@ -6,16 +7,84 @@ const { DEFAULT_TEMPLATES } = require('./certificateTemplateDefaults');
 pdfMake.setFonts(fonts);
 const ALLOWED_FONT_PATHS = new Set(Object.values(fonts).flatMap((variants) => Object.values(variants)));
 // Only the exact bundled font file paths may be read from disk; no other
-// local files, and no remote URLs, are ever referenced from a docDefinition.
+// local files, and no remote URLs, are ever referenced from a docDefinition
+// (pdfmake never fetches a URL itself — see resolveImageValue below for how
+// Cloudinary-hosted images still get embedded safely).
 pdfMake.setLocalAccessPolicy((path) => ALLOWED_FONT_PATHS.has(path));
 pdfMake.setUrlAccessPolicy(() => false);
 
-const NAVY = '#2B6CB0';
+// Uploaded logos/signatures are stored as Cloudinary URLs (see
+// uploads.routes.js), not inline base64, so they must be fetched into a data
+// URI before pdfmake can embed them — pdfmake's own URL fetching stays
+// disabled (see setUrlAccessPolicy above) for SSRF safety, so this is the
+// only path by which a remote image ever gets read, and only from this
+// allowlisted host.
+const ALLOWED_IMAGE_HOSTS = new Set(['res.cloudinary.com']);
+const MAX_REMOTE_IMAGE_BYTES = 5_000_000;
+
+function fetchAsDataUrl(url) {
+  return new Promise((resolve, reject) => {
+    let parsed;
+    try {
+      parsed = new URL(url);
+    } catch {
+      return reject(new Error('Invalid image URL'));
+    }
+    if (parsed.protocol !== 'https:' || !ALLOWED_IMAGE_HOSTS.has(parsed.hostname)) {
+      return reject(new Error(`Image host not allowed: ${parsed.hostname}`));
+    }
+
+    https.get(parsed, (response) => {
+      if (response.statusCode !== 200) {
+        response.resume();
+        return reject(new Error(`Failed to fetch image (${response.statusCode})`));
+      }
+      const chunks = [];
+      let total = 0;
+      response.on('data', (chunk) => {
+        total += chunk.length;
+        if (total > MAX_REMOTE_IMAGE_BYTES) {
+          response.destroy();
+          return reject(new Error('Remote image too large'));
+        }
+        chunks.push(chunk);
+      });
+      response.on('end', () => {
+        const contentType = response.headers['content-type'] || 'image/png';
+        resolve(`data:${contentType};base64,${Buffer.concat(chunks).toString('base64')}`);
+      });
+      response.on('error', reject);
+    }).on('error', reject);
+  });
+}
+
+// Resolves either an already-inline data URI (legacy, or a fresh upload not
+// yet round-tripped through Cloudinary) or a Cloudinary URL into a data URI
+// pdfmake can embed directly. `cache` dedupes repeat fetches of the same
+// image within one render — e.g. a bulk two-up print shares one logo/
+// signature URL across many entries.
+async function resolveImageValue(value, cache) {
+  if (!value) return null;
+  if (!value.startsWith('https://')) return value; // already a data: URI
+  if (cache.has(value)) return cache.get(value);
+  try {
+    const dataUrl = await fetchAsDataUrl(value);
+    cache.set(value, dataUrl);
+    return dataUrl;
+  } catch (err) {
+    console.error('Failed to fetch remote certificate image:', value, err.message);
+    cache.set(value, null);
+    return null;
+  }
+}
+
 const INK = '#2D3748';
 
+// Numeral-ordinal form (1ST, 2ND, 3RD...) rather than spelled-out words —
+// used as the certificate's {{rank_word}} merge field.
 const RANK_WORDS = {
-  1: 'FIRST', 2: 'SECOND', 3: 'THIRD', 4: 'FOURTH', 5: 'FIFTH',
-  6: 'SIXTH', 7: 'SEVENTH', 8: 'EIGHTH', 9: 'NINTH', 10: 'TENTH',
+  1: '1ST', 2: '2ND', 3: '3RD', 4: '4TH', 5: '5TH',
+  6: '6TH', 7: '7TH', 8: '8TH', 9: '9TH', 10: '10TH',
 };
 
 // Point dimensions (72pt/inch) for the three paper choices offered in the
@@ -76,9 +145,9 @@ function fontNameFor(fontFamily) {
 }
 
 // Splits "plain **bold** plain" into pdfmake inline text runs — bold
-// segments are accent-colored (navy) regardless of the element's own color,
-// matching the original design where key phrases (a category name, a rank)
-// are emphasized within an otherwise plain sentence.
+// segments are emphasized via font weight only (matching the element's own
+// color), not a separate accent color, so certificate text reads as plain
+// black/ink rather than mixing in blue.
 function textRuns(text, el) {
   const font = fontNameFor(el.fontFamily);
   const color = el.color || INK;
@@ -90,7 +159,7 @@ function textRuns(text, el) {
       font,
       bold: i % 2 === 1 ? true : !!el.bold,
       italics: !!el.italics,
-      color: i % 2 === 1 ? NAVY : color,
+      color,
     }));
 }
 
@@ -122,13 +191,49 @@ function renderShapeElement(el) {
   return { canvas: [vector], absolutePosition: { x: 0, y: 0 } };
 }
 
-function renderImageElement(el, qrDataUrl) {
+function renderImageElement(el, qrDataUrl, signatureDataUrl) {
   // Uploaded logos are stored as a data URI directly on the element (in the
   // same certificate_templates.elements JSONB, no separate file storage) —
   // simplest option given Render's web service filesystem isn't persistent.
-  const dataUrl = el.source === 'qr' ? qrDataUrl : el.source === 'custom' ? el.imageData : null;
+  // The principal's e-signature instead lives once in certificate_settings
+  // (shared across every certificate type) and is passed in per-render.
+  const dataUrl =
+    el.source === 'qr' ? qrDataUrl :
+    el.source === 'signature' ? signatureDataUrl :
+    el.source === 'custom' ? el.imageData : null;
   if (!dataUrl) return null;
   return { image: dataUrl, width: el.width, height: el.height, absolutePosition: { x: el.x, y: el.y } };
+}
+
+// Matches the shared 'signature_line' element in certificateTemplateDefaults.js
+// — used as a fallback anchor if a template's signature_line was customized
+// away entirely, so auto-injection still has somewhere sane to sit.
+const DEFAULT_SIGNATURE_ANCHOR = { x: 166, y: 642, width: 280 };
+
+// If a principal's e-signature is configured but this template's elements
+// don't already place one, adds one automatically — anchored just above the
+// 'signature_line' element (wherever the admin has it) so an uploaded
+// signature shows up on every certificate without requiring a manual edit in
+// the Designer. Once an admin explicitly adds/moves/saves a signature image
+// themselves, that saved element is used instead and this is a no-op.
+function withAutoSignature(elements, signatureDataUrl) {
+  const list = elements || [];
+  if (!signatureDataUrl) return list;
+  if (list.some((el) => el.type === 'image' && el.source === 'signature')) return list;
+
+  const anchor = list.find((el) => el.id === 'signature_line') || DEFAULT_SIGNATURE_ANCHOR;
+  const width = 150;
+  const height = 46;
+  const signatureEl = {
+    id: 'auto_signature',
+    type: 'image',
+    source: 'signature',
+    x: Math.round(anchor.x + anchor.width / 2 - width / 2),
+    y: Math.round(anchor.y - height - 4),
+    width,
+    height,
+  };
+  return [...list, signatureEl];
 }
 
 // Proportionally scales and offsets a positioned-elements array — used to
@@ -155,18 +260,33 @@ function scaleElements(elements, scale, offsetX, offsetY) {
  * can reuse it twice per sheet without duplicating the element-rendering
  * logic.
  */
-async function buildCertificateContentNodes(elements, mergeData, qrToken, controlNo) {
+async function buildCertificateContentNodes(elements, mergeData, qrToken, controlNo, signatureDataUrl, imageCache = new Map()) {
   const list = elements || [];
   // Only generate the QR image when something in the layout actually needs
   // it — most certificates no longer include one.
   const needsQr = list.some((el) => el.type === 'image' && el.source === 'qr');
-  const qrDataUrl = needsQr ? await generateQrDataUrl(qrToken || controlNo) : null;
+  const [qrDataUrl, resolvedSignature] = await Promise.all([
+    needsQr ? generateQrDataUrl(qrToken || controlNo) : Promise.resolve(null),
+    resolveImageValue(signatureDataUrl, imageCache),
+  ]);
 
-  return list
+  // Uploaded logos are stored as a Cloudinary URL (see uploads.routes.js) —
+  // resolve each into an embeddable data URI before rendering.
+  const resolvedList = await Promise.all(
+    list.map(async (el) => {
+      if (el.type === 'image' && el.source === 'custom' && el.imageData) {
+        const resolved = await resolveImageValue(el.imageData, imageCache);
+        return resolved !== el.imageData ? { ...el, imageData: resolved } : el;
+      }
+      return el;
+    })
+  );
+
+  return resolvedList
     .map((el) => {
       if (el.type === 'text') return renderTextElement(el, mergeData);
       if (el.type === 'shape') return renderShapeElement(el);
-      if (el.type === 'image') return renderImageElement(el, qrDataUrl);
+      if (el.type === 'image') return renderImageElement(el, qrDataUrl, resolvedSignature);
       return null;
     })
     .filter(Boolean);
@@ -178,8 +298,8 @@ async function buildCertificateContentNodes(elements, mergeData, qrToken, contro
  * layout is entirely data-driven (edited via the certificate template
  * designer) rather than hardcoded here.
  */
-async function buildCertificateDocDefinition({ elements, mergeData, qrToken, controlNo, orientation, paperSize }) {
-  const content = await buildCertificateContentNodes(elements, mergeData, qrToken, controlNo);
+async function buildCertificateDocDefinition({ elements, mergeData, qrToken, controlNo, orientation, paperSize, signatureDataUrl }) {
+  const content = await buildCertificateContentNodes(withAutoSignature(elements, signatureDataUrl), mergeData, qrToken, controlNo, signatureDataUrl, new Map());
   const { width, height } = pageDims(paperSize, orientation);
 
   return {
@@ -199,11 +319,14 @@ async function buildCertificateDocDefinition({ elements, mergeData, qrToken, con
  * `{ elements, mergeData, qrToken, controlNo }`; consecutive pairs share a
  * sheet, and a trailing odd entry gets a sheet to itself (blank bottom half).
  */
-async function buildCertificateDocDefinitionMultiSheet(entries, { paperSize, orientation }) {
+async function buildCertificateDocDefinitionMultiSheet(entries, { paperSize, orientation, signatureDataUrl }) {
   const { width, height } = pageDims(paperSize, orientation);
   const slotHeight = height / 2;
   const scale = 0.5;
   const offsetX = width * 0.25;
+  // Shared across every entry so a logo/signature URL common to the whole
+  // batch (the usual case) is only fetched from Cloudinary once.
+  const imageCache = new Map();
 
   const content = [];
   for (let i = 0; i < entries.length; i += 2) {
@@ -212,10 +335,12 @@ async function buildCertificateDocDefinitionMultiSheet(entries, { paperSize, ori
     if (content.length > 0) sheetContent.push({ text: '', pageBreak: 'before' });
 
     if (a) {
-      sheetContent.push(...await buildCertificateContentNodes(scaleElements(a.elements, scale, offsetX, 0), a.mergeData, a.qrToken, a.controlNo));
+      const aElements = scaleElements(withAutoSignature(a.elements, signatureDataUrl), scale, offsetX, 0);
+      sheetContent.push(...await buildCertificateContentNodes(aElements, a.mergeData, a.qrToken, a.controlNo, signatureDataUrl, imageCache));
     }
     if (b) {
-      sheetContent.push(...await buildCertificateContentNodes(scaleElements(b.elements, scale, offsetX, slotHeight), b.mergeData, b.qrToken, b.controlNo));
+      const bElements = scaleElements(withAutoSignature(b.elements, signatureDataUrl), scale, offsetX, slotHeight);
+      sheetContent.push(...await buildCertificateContentNodes(bElements, b.mergeData, b.qrToken, b.controlNo, signatureDataUrl, imageCache));
     }
 
     sheetContent.push({
@@ -269,13 +394,14 @@ function buildCompletionMergeData({
  * 6+ journalism categories across the Friday press conference sessions.
  */
 async function renderCertificatePdf(opts, res) {
-  const { student, template } = opts;
+  const { student, template, signatureDataUrl } = opts;
   const { mergeData, controlNo } = buildCompletionMergeData(opts);
   const tpl = template || DEFAULT_TEMPLATES.completion;
   const docDefinition = await buildCertificateDocDefinition({
     elements: tpl.elements,
     orientation: tpl.orientation,
     paperSize: tpl.paper_size,
+    signatureDataUrl,
     mergeData,
     qrToken: student.qr_token,
     controlNo,
@@ -313,13 +439,14 @@ function buildRankingMergeData({
  * Certificate of Recognition — per-category ranking award (1st through 10th).
  */
 async function renderRankingCertificatePdf(opts, res) {
-  const { student, template } = opts;
+  const { student, template, signatureDataUrl } = opts;
   const { mergeData, controlNo } = buildRankingMergeData(opts);
   const tpl = template || DEFAULT_TEMPLATES.ranking;
   const docDefinition = await buildCertificateDocDefinition({
     elements: tpl.elements,
     orientation: tpl.orientation,
     paperSize: tpl.paper_size,
+    signatureDataUrl,
     mergeData,
     qrToken: student.qr_token,
     controlNo,
@@ -357,13 +484,14 @@ function buildSpeakerMergeData({
  * position/organization instead via the composed {{position_line}} field).
  */
 async function renderSpeakerCertificatePdf(opts, res) {
-  const { template } = opts;
+  const { template, signatureDataUrl } = opts;
   const { mergeData, controlNo } = buildSpeakerMergeData(opts);
   const tpl = template || DEFAULT_TEMPLATES.speaker;
   const docDefinition = await buildCertificateDocDefinition({
     elements: tpl.elements,
     orientation: tpl.orientation,
     paperSize: tpl.paper_size,
+    signatureDataUrl,
     mergeData,
     controlNo,
   });
@@ -402,13 +530,14 @@ function buildTeacherMergeData({
  * instead via the composed {{role_line}} field).
  */
 async function renderTeacherCertificatePdf(opts, res) {
-  const { template } = opts;
+  const { template, signatureDataUrl } = opts;
   const { mergeData, controlNo } = buildTeacherMergeData(opts);
   const tpl = template || DEFAULT_TEMPLATES.teacher;
   const docDefinition = await buildCertificateDocDefinition({
     elements: tpl.elements,
     orientation: tpl.orientation,
     paperSize: tpl.paper_size,
+    signatureDataUrl,
     mergeData,
     controlNo,
   });

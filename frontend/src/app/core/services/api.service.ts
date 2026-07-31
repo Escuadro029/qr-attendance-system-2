@@ -200,4 +200,11 @@ export class ApiService {
     const idsParam = !ids || ids === 'all' ? 'all' : ids.join(',');
     return this.http.get(`${this.base}/teachers/bulk.pdf?ids=${encodeURIComponent(idsParam)}`, { responseType: 'blob' });
   }
+
+  // Uploads a logo/signature image to Cloudinary and returns its hosted URL —
+  // used by the certificate designer's logo upload and Certificate Settings'
+  // e-signature upload, instead of storing the image inline as base64.
+  uploadImage(dataUri: string, folder: 'certificate-logos' | 'certificate-signatures'): Observable<{ url: string }> {
+    return this.http.post<{ url: string }>(`${this.base}/uploads/image`, { dataUri, folder });
+  }
 }

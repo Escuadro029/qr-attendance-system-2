@@ -44,7 +44,10 @@ function isValidElements(elements) {
       return (
         typeof el.imageData === 'string' &&
         el.imageData.length <= MAX_IMAGE_DATA_LENGTH &&
-        /^data:image\/(png|jpe?g);base64,/.test(el.imageData) // matches pdfmake's supported embedded-image formats
+        // Uploaded logos are hosted on Cloudinary (see uploads.routes.js);
+        // the data: form is only kept for backward compatibility with
+        // anything saved before that migration.
+        (/^data:image\/(png|jpe?g);base64,/.test(el.imageData) || /^https:\/\/res\.cloudinary\.com\//.test(el.imageData))
       );
     }
     return true;
@@ -128,6 +131,7 @@ router.post('/:key/preview.pdf', requireAuth, requireAdmin, async (req, res) => 
         signatoryName: settings.signatory_name,
         signatoryTitle: settings.signatory_title,
         customFields: settings.custom_fields,
+        signatureDataUrl: settings.signatory_signature,
         template,
       }, res);
     } else if (key === 'ranking') {
@@ -142,6 +146,7 @@ router.post('/:key/preview.pdf', requireAuth, requireAdmin, async (req, res) => 
         signatoryName: settings.signatory_name,
         signatoryTitle: settings.signatory_title,
         customFields: settings.custom_fields,
+        signatureDataUrl: settings.signatory_signature,
         template,
       }, res);
     } else if (key === 'speaker') {
@@ -153,6 +158,7 @@ router.post('/:key/preview.pdf', requireAuth, requireAdmin, async (req, res) => 
         signatoryName: settings.signatory_name,
         signatoryTitle: settings.signatory_title,
         customFields: settings.custom_fields,
+        signatureDataUrl: settings.signatory_signature,
         template,
       }, res);
     } else {
@@ -164,6 +170,7 @@ router.post('/:key/preview.pdf', requireAuth, requireAdmin, async (req, res) => 
         signatoryName: settings.signatory_name,
         signatoryTitle: settings.signatory_title,
         customFields: settings.custom_fields,
+        signatureDataUrl: settings.signatory_signature,
         template,
       }, res);
     }

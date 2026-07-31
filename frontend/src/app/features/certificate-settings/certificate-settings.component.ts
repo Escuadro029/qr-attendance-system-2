@@ -1,6 +1,7 @@
 import { Component, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { DatePipe } from '@angular/common';
+import { firstValueFrom } from 'rxjs';
 import { ApiService } from '../../core/services/api.service';
 import { CertificateCustomField, CertificateSettings } from '../../core/models/models';
 import { slugifyFieldName } from '../../core/utils/slugify';
@@ -36,6 +37,25 @@ import { slugifyFieldName } from '../../core/utils/slugify';
 
           <label style="margin-top:12px;">Venue</label>
           <input name="venue" [(ngModel)]="form.venue" placeholder="e.g. the school auditorium" />
+
+          <label style="margin-top:12px;">Principal's E-Signature</label>
+          @if (form.signatory_signature) {
+            <img class="signature-preview" [src]="form.signatory_signature" alt="Signature preview" />
+          }
+          <div class="style-row">
+            <button type="button" class="btn btn-outline btn-sm" (click)="signatureInput.click()" [disabled]="uploadingSignature()">
+              {{ uploadingSignature() ? 'Uploading…' : (form.signatory_signature ? 'Replace Signature' : 'Upload Signature') }}
+            </button>
+            @if (form.signatory_signature) {
+              <button type="button" class="btn btn-outline btn-sm" (click)="removeSignature()" [disabled]="uploadingSignature()">Remove</button>
+            }
+          </div>
+          <input #signatureInput type="file" accept="image/png,image/jpeg" hidden (change)="onSignatureFileSelected($event)" />
+          <p class="hint" style="margin-top:6px;">
+            Uploaded once here (to Cloudinary) and automatically included on every certificate type (completion,
+            ranking, speaker/lecturer, and teacher) above the signature line — no need to add it separately in
+            the Certificate Designer.
+          </p>
 
           <div class="custom-fields-head">
             <label style="margin:0;">Custom Fields</label>
@@ -83,11 +103,14 @@ import { slugifyFieldName } from '../../core/utils/slugify';
       color: var(--danger); cursor: pointer; font-size: 0.9rem; line-height: 1; flex-shrink: 0;
     }
     .tag-preview { font-family: monospace; font-size: 0.72rem; color: var(--navy); background: rgba(31,41,61,0.06); padding: 2px 6px; border-radius: 999px; white-space: nowrap; }
+    .style-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .signature-preview { display: block; max-width: 220px; max-height: 80px; margin-bottom: 8px; border: 1px solid var(--border); border-radius: 4px; background: repeating-linear-gradient(45deg, #f5f5f5, #f5f5f5 6px, #fff 6px, #fff 12px); }
   `],
 })
 export class CertificateSettingsComponent implements OnInit {
   loading = signal(true);
   saving = signal(false);
+  uploadingSignature = signal(false);
   error = signal('');
   success = signal('');
   form: CertificateSettings = { custom_fields: [] };
@@ -123,6 +146,62 @@ export class CertificateSettingsComponent implements OnInit {
 
   removeCustomField(index: number) {
     this.form.custom_fields = (this.form.custom_fields || []).filter((_, i) => i !== index);
+  }
+
+  async onSignatureFileSelected(event: Event) {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0] ?? null;
+    input.value = ''; // allow re-selecting the same file again later
+    if (!file) return;
+
+    if (!['image/png', 'image/jpeg'].includes(file.type)) {
+      this.error.set('Signature must be a PNG or JPEG image.');
+      return;
+    }
+
+    this.uploadingSignature.set(true);
+    this.error.set('');
+    try {
+      const resizedDataUri = await this.resizeSignatureFile(file);
+      const { url } = await firstValueFrom(this.api.uploadImage(resizedDataUri, 'certificate-signatures'));
+      this.form.signatory_signature = url;
+    } catch {
+      this.error.set('Could not upload that image. Please try again.');
+    } finally {
+      this.uploadingSignature.set(false);
+    }
+  }
+
+  removeSignature() {
+    this.form.signatory_signature = undefined;
+  }
+
+  // Downscales the upload client-side so a saved signature stays small — a
+  // signature scan is a horizontal image, so only the wider dimension is
+  // capped (unlike the Designer's logo upload, this isn't cropped to a
+  // circle: a signature must keep its natural rectangular shape).
+  private resizeSignatureFile(file: File, maxWidth = 400): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onerror = () => reject(reader.error);
+      reader.onload = () => {
+        const image = new Image();
+        image.onerror = reject;
+        image.onload = () => {
+          const scale = Math.min(1, maxWidth / image.width);
+          const canvas = document.createElement('canvas');
+          canvas.width = Math.max(1, Math.round(image.width * scale));
+          canvas.height = Math.max(1, Math.round(image.height * scale));
+          const ctx = canvas.getContext('2d');
+          if (!ctx) return reject(new Error('Canvas not supported'));
+          ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+          // PNG preserves transparency, which most signature scans rely on.
+          resolve(canvas.toDataURL('image/png'));
+        };
+        image.src = reader.result as string;
+      };
+      reader.readAsDataURL(file);
+    });
   }
 
   save() {

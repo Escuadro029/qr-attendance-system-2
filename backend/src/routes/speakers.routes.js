@@ -101,6 +101,7 @@ router.get('/bulk.pdf', requireAuth, async (req, res) => {
     const docDefinition = await buildCertificateDocDefinitionMultiSheet(entries, {
       paperSize: template.paper_size,
       orientation: template.orientation,
+      signatureDataUrl: settings.signatory_signature,
     });
 
     res.set('Content-Type', 'application/pdf');
@@ -138,6 +139,7 @@ router.get('/:id/certificate.pdf', requireAuth, async (req, res) => {
       signatoryName: req.query.signatory || settings.signatory_name,
       signatoryTitle: req.query.signatoryTitle || settings.signatory_title,
       customFields: settings.custom_fields,
+      signatureDataUrl: settings.signatory_signature,
       template,
     }, res);
   } catch (err) {

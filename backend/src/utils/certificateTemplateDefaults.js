@@ -18,7 +18,7 @@ const GRAY = '#6B7280';
 // except the title and body paragraph, which differ per type below.
 const FRAME_ELEMENTS = [
   { id: 'seal_circle', type: 'shape', shape: 'ellipse', x: 280, y: 29, width: 52, height: 52, lineColor: NAVY, lineWidth: 1.2 },
-  { id: 'seal_label', type: 'text', x: 280, y: 47, width: 52, height: 20, text: 'OFFICIAL\nSEAL', fontSize: 6, bold: true, color: NAVY, align: 'center', fontFamily: 'sans' },
+  { id: 'seal_label', type: 'text', x: 280, y: 47, width: 52, height: 20, text: 'OFFICIAL\nSEAL', fontSize: 6, bold: true, color: INK, align: 'center', fontFamily: 'sans' },
 
   { id: 'republic_line', type: 'text', x: 0, y: 90, width: 612, height: 14, text: 'Republic of the Philippines', fontSize: 10, color: INK, align: 'center', fontFamily: 'serif' },
   { id: 'dept_line', type: 'text', x: 0, y: 103, width: 612, height: 20, text: 'Department of Education', fontSize: 15, bold: true, italics: true, color: INK, align: 'center', fontFamily: 'serif' },
@@ -27,7 +27,7 @@ const FRAME_ELEMENTS = [
   { id: 'header_divider', type: 'shape', shape: 'line', x: 60, y: 140, width: 492, height: 0, lineColor: '#B7CCE0', lineWidth: 1 },
 
   { id: 'awarded_to', type: 'text', x: 0, y: 200, width: 612, height: 16, text: 'is awarded to', fontSize: 11, color: INK, align: 'center', fontFamily: 'sans' },
-  { id: 'awardee_name', type: 'text', x: 0, y: 218, width: 612, height: 30, text: '{{full_name}}', fontSize: 22, bold: true, color: NAVY, align: 'center', fontFamily: 'serif' },
+  { id: 'awardee_name', type: 'text', x: 0, y: 218, width: 612, height: 30, text: '{{full_name}}', fontSize: 22, bold: true, color: INK, align: 'center', fontFamily: 'serif' },
   { id: 'name_underline', type: 'shape', shape: 'line', x: 216, y: 246, width: 180, height: 0, lineColor: INK, lineWidth: 0.75 },
   { id: 'school_line', type: 'text', x: 80, y: 254, width: 452, height: 16, text: 'Grade {{grade}} - {{section}}, {{school_name}}', fontSize: 10.5, italics: true, color: INK, align: 'center', fontFamily: 'sans' },
 
@@ -49,7 +49,7 @@ const FRAME_ELEMENTS = [
   { id: 'control_value', type: 'text', x: 407, y: 778, width: 170, height: 12, text: '{{control_no}}', fontSize: 8, color: INK, align: 'center', fontFamily: 'sans' },
 ];
 
-const TITLE_ELEMENT = { id: 'title', type: 'text', x: 0, y: 158, width: 612, height: 40, text: 'Certificate of Recognition', fontSize: 30, bold: true, italics: true, color: NAVY, align: 'center', fontFamily: 'serif' };
+const TITLE_ELEMENT = { id: 'title', type: 'text', x: 0, y: 158, width: 612, height: 40, text: 'Certificate of Recognition', fontSize: 30, bold: true, italics: true, color: INK, align: 'center', fontFamily: 'serif' };
 const APPRECIATION_TITLE_ELEMENT = { ...TITLE_ELEMENT, text: 'Certificate of Appreciation' };
 
 // Speakers/lecturers have no grade/section, so the subtitle line under their

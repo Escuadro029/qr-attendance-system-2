@@ -1,6 +1,7 @@
 import { Component, ElementRef, OnDestroy, OnInit, ViewChild, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
+import { firstValueFrom } from 'rxjs';
 import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 import { ApiService } from '../../core/services/api.service';
 import { CertificateElement, CertificateKey, CertificateOrientation, CertificatePaperSize, CertificateTemplate } from '../../core/models/models';
@@ -124,9 +125,12 @@ let nextId = 0;
         </div>
         <button class="btn btn-outline btn-sm" (click)="addTextBox()">+ Add Text Box</button>
         <button class="btn btn-outline btn-sm" (click)="addLogo()">+ Add Logo</button>
+        <button class="btn btn-outline btn-sm" (click)="addSignature()" [disabled]="hasSignatureElement()">+ Add Signature</button>
         <button class="btn btn-outline btn-sm" (click)="bringForward()" [disabled]="!selectedEl()">Bring Forward</button>
         <button class="btn btn-outline btn-sm" (click)="sendBackward()" [disabled]="!selectedEl()">Send Backward</button>
         <button class="btn btn-outline btn-sm" (click)="deleteSelected()" [disabled]="!selectedEl()">Delete</button>
+        <button class="btn btn-outline btn-sm" (click)="undo()" [disabled]="!undoStack.length" title="Ctrl+Z">Undo</button>
+        <button class="btn btn-outline btn-sm" (click)="redo()" [disabled]="!redoStack.length" title="Ctrl+Shift+Z">Redo</button>
         <button class="btn btn-outline btn-sm" (click)="resetToDefault()">Reset to Default Layout</button>
         <span class="spacer"></span>
         <button class="btn btn-outline btn-sm" (click)="preview()" [disabled]="previewing() || loading()">
@@ -184,7 +188,13 @@ let nextId = 0;
                       }
                     }
                     @case ('image') {
-                      @if (el.imageData) {
+                      @if (el.source === 'signature') {
+                        @if (signatureImageUrl()) {
+                          <img class="el-image" [src]="signatureImageUrl()" alt="" />
+                        } @else {
+                          <div class="el-qr">SIGNATURE</div>
+                        }
+                      } @else if (el.imageData) {
                         <img class="el-image" [src]="el.imageData" alt="" />
                       } @else if (el.source === 'qr') {
                         <div class="el-qr">QR CODE</div>
@@ -209,58 +219,59 @@ let nextId = 0;
               </h3>
 
               <div class="pos-grid">
-                <label>X <input type="number" [ngModel]="round(el.x)" (ngModelChange)="updateElement(el.id, { x: $event })" /></label>
-                <label>Y <input type="number" [ngModel]="round(el.y)" (ngModelChange)="updateElement(el.id, { y: $event })" /></label>
-                <label>Width <input type="number" [ngModel]="round(el.width)" (ngModelChange)="updateElement(el.id, { width: $event })" /></label>
-                <label>Height <input type="number" [ngModel]="round(el.height)" (ngModelChange)="updateElement(el.id, { height: $event })" /></label>
+                <label>X <input type="number" [ngModel]="round(el.x)" (focus)="snapshotHistory()" (ngModelChange)="updateElement(el.id, { x: $event })" /></label>
+                <label>Y <input type="number" [ngModel]="round(el.y)" (focus)="snapshotHistory()" (ngModelChange)="updateElement(el.id, { y: $event })" /></label>
+                <label>Width <input type="number" [ngModel]="round(el.width)" (focus)="snapshotHistory()" (ngModelChange)="updateElement(el.id, { width: $event })" /></label>
+                <label>Height <input type="number" [ngModel]="round(el.height)" (focus)="snapshotHistory()" (ngModelChange)="updateElement(el.id, { height: $event })" /></label>
               </div>
 
               @if (el.type === 'text') {
                 <label class="block-label">Insert a field</label>
+                <p class="hint" style="margin:0 0 6px;">Click to insert at the cursor, or drag a field into the text.</p>
                 <div class="field-chips">
                   @for (f of fields(); track f.tag) {
-                    <button type="button" class="chip-btn" (click)="insertField(f.tag)">{{ f.label }}</button>
+                    <button type="button" class="chip-btn" draggable="true" (dragstart)="onFieldDragStart($event, f.tag)" (click)="snapshotHistory(); insertField(f.tag)">{{ f.label }}</button>
                   }
                 </div>
 
                 <label class="block-label">Text</label>
-                <textarea #textArea rows="4" [ngModel]="el.text" (ngModelChange)="updateElement(el.id, { text: $event })"></textarea>
-                <button type="button" class="btn btn-outline btn-sm" style="margin-top:6px;" (click)="wrapBold()">Bold selected text</button>
+                <textarea #textArea rows="4" [ngModel]="el.text" (focus)="snapshotHistory()" (ngModelChange)="updateElement(el.id, { text: $event })" (drop)="onFieldDrop($event)" (dragover)="$event.preventDefault()"></textarea>
+                <button type="button" class="btn btn-outline btn-sm" style="margin-top:6px;" (click)="snapshotHistory(); wrapBold()">Bold selected text</button>
 
                 <div class="style-row">
-                  <label>Size <input type="number" min="4" [ngModel]="el.fontSize || 11" (ngModelChange)="updateElement(el.id, { fontSize: $event })" /></label>
-                  <button type="button" class="chip-btn" [class.active]="el.bold" (click)="updateElement(el.id, { bold: !el.bold })">Bold</button>
-                  <button type="button" class="chip-btn" [class.active]="el.italics" (click)="updateElement(el.id, { italics: !el.italics })">Italic</button>
-                  <button type="button" class="chip-btn" [class.active]="el.uppercase" (click)="updateElement(el.id, { uppercase: !el.uppercase })">CAPS</button>
+                  <label>Size <input type="number" min="4" [ngModel]="el.fontSize || 11" (focus)="snapshotHistory()" (ngModelChange)="updateElement(el.id, { fontSize: $event })" /></label>
+                  <button type="button" class="chip-btn" [class.active]="el.bold" (click)="snapshotHistory(); updateElement(el.id, { bold: !el.bold })">Bold</button>
+                  <button type="button" class="chip-btn" [class.active]="el.italics" (click)="snapshotHistory(); updateElement(el.id, { italics: !el.italics })">Italic</button>
+                  <button type="button" class="chip-btn" [class.active]="el.uppercase" (click)="snapshotHistory(); updateElement(el.id, { uppercase: !el.uppercase })">CAPS</button>
                 </div>
                 <div class="style-row">
                   @for (a of aligns; track a) {
-                    <button type="button" class="chip-btn" [class.active]="(el.align || 'left') === a" (click)="updateElement(el.id, { align: a })">{{ a }}</button>
+                    <button type="button" class="chip-btn" [class.active]="(el.align || 'left') === a" (click)="snapshotHistory(); updateElement(el.id, { align: a })">{{ a }}</button>
                   }
                 </div>
                 <div class="style-row">
-                  <button type="button" class="chip-btn" [class.active]="!el.fontFamily || el.fontFamily === 'sans'" (click)="updateElement(el.id, { fontFamily: 'sans' })">Sans</button>
-                  <button type="button" class="chip-btn" [class.active]="el.fontFamily === 'serif'" (click)="updateElement(el.id, { fontFamily: 'serif' })">Serif</button>
-                  <button type="button" class="chip-btn" [class.active]="el.fontFamily === 'oldenglish'" (click)="updateElement(el.id, { fontFamily: 'oldenglish' })">Old English</button>
-                  <button type="button" class="chip-btn" [class.active]="el.fontFamily === 'trajanpro'" (click)="updateElement(el.id, { fontFamily: 'trajanpro' })">Trajan Pro</button>
-                  <button type="button" class="chip-btn" [class.active]="el.fontFamily === 'tahoma'" (click)="updateElement(el.id, { fontFamily: 'tahoma' })">Tahoma</button>
-                  <label class="color-label">Color <input type="color" [ngModel]="el.color || '#2D3748'" (ngModelChange)="updateElement(el.id, { color: $event })" /></label>
+                  <button type="button" class="chip-btn" [class.active]="!el.fontFamily || el.fontFamily === 'sans'" (click)="snapshotHistory(); updateElement(el.id, { fontFamily: 'sans' })">Sans</button>
+                  <button type="button" class="chip-btn" [class.active]="el.fontFamily === 'serif'" (click)="snapshotHistory(); updateElement(el.id, { fontFamily: 'serif' })">Serif</button>
+                  <button type="button" class="chip-btn" [class.active]="el.fontFamily === 'oldenglish'" (click)="snapshotHistory(); updateElement(el.id, { fontFamily: 'oldenglish' })">Old English MT</button>
+                  <button type="button" class="chip-btn" [class.active]="el.fontFamily === 'trajanpro'" (click)="snapshotHistory(); updateElement(el.id, { fontFamily: 'trajanpro' })">Trajan Pro</button>
+                  <button type="button" class="chip-btn" [class.active]="el.fontFamily === 'tahoma'" (click)="snapshotHistory(); updateElement(el.id, { fontFamily: 'tahoma' })">Tahoma</button>
+                  <label class="color-label">Color <input type="color" [ngModel]="el.color || '#2D3748'" (focus)="snapshotHistory()" (ngModelChange)="updateElement(el.id, { color: $event })" /></label>
                 </div>
               }
 
               @if (el.type === 'shape') {
                 <div class="style-row">
-                  <label class="color-label">Line color <input type="color" [ngModel]="el.lineColor || '#000000'" (ngModelChange)="updateElement(el.id, { lineColor: $event })" /></label>
-                  <label>Line width <input type="number" min="0" step="0.25" [ngModel]="el.lineWidth || 1" (ngModelChange)="updateElement(el.id, { lineWidth: $event })" /></label>
+                  <label class="color-label">Line color <input type="color" [ngModel]="el.lineColor || '#000000'" (focus)="snapshotHistory()" (ngModelChange)="updateElement(el.id, { lineColor: $event })" /></label>
+                  <label>Line width <input type="number" min="0" step="0.25" [ngModel]="el.lineWidth || 1" (focus)="snapshotHistory()" (ngModelChange)="updateElement(el.id, { lineWidth: $event })" /></label>
                 </div>
                 @if (el.shape !== 'line') {
                   <div class="style-row">
-                    <label class="color-label">Fill color <input type="color" [ngModel]="el.fillColor || '#ffffff'" (ngModelChange)="updateElement(el.id, { fillColor: $event })" />
-                      <button type="button" class="chip-btn" (click)="updateElement(el.id, { fillColor: undefined })">No fill</button>
+                    <label class="color-label">Fill color <input type="color" [ngModel]="el.fillColor || '#ffffff'" (focus)="snapshotHistory()" (ngModelChange)="updateElement(el.id, { fillColor: $event })" />
+                      <button type="button" class="chip-btn" (click)="snapshotHistory(); updateElement(el.id, { fillColor: undefined })">No fill</button>
                     </label>
                   </div>
                   @if (el.shape === 'rect') {
-                    <label>Corner radius <input type="number" min="0" [ngModel]="el.cornerRadius || 0" (ngModelChange)="updateElement(el.id, { cornerRadius: $event })" /></label>
+                    <label>Corner radius <input type="number" min="0" [ngModel]="el.cornerRadius || 0" (focus)="snapshotHistory()" (ngModelChange)="updateElement(el.id, { cornerRadius: $event })" /></label>
                   }
                 }
               }
@@ -268,17 +279,24 @@ let nextId = 0;
               @if (el.type === 'image') {
                 @if (el.source === 'qr') {
                   <p class="hint">This is the student's QR code — generated automatically, but you can move and resize it.</p>
+                } @else if (el.source === 'signature') {
+                  @if (signatureImageUrl()) {
+                    <img class="logo-preview" [src]="signatureImageUrl()" alt="" />
+                  }
+                  <p class="hint">This is the principal's e-signature, set once in <a routerLink="/certificate-settings">Certificate Settings</a> — you can move and resize it here, but upload or replace the image itself there.</p>
                 } @else {
                   @if (el.imageData) {
                     <img class="logo-preview" [src]="el.imageData" alt="" />
                   }
                   <div class="style-row">
-                    <button type="button" class="btn btn-outline btn-sm" (click)="triggerReplaceImage(el.id)">{{ el.imageData ? 'Replace Image' : 'Upload Image' }}</button>
+                    <button type="button" class="btn btn-outline btn-sm" (click)="triggerReplaceImage(el.id)" [disabled]="uploadingImage()">
+                      {{ uploadingImage() ? 'Uploading…' : (el.imageData ? 'Replace Image' : 'Upload Image') }}
+                    </button>
                     @if (el.imageData) {
-                      <button type="button" class="btn btn-outline btn-sm" (click)="removeImage(el.id)">Remove Image</button>
+                      <button type="button" class="btn btn-outline btn-sm" (click)="removeImage(el.id)" [disabled]="uploadingImage()">Remove Image</button>
                     }
                   </div>
-                  <p class="hint">PNG or JPEG, resized automatically to keep the file small.</p>
+                  <p class="hint">PNG or JPEG — automatically cropped into a circle that fills the frame (no stretching), uploaded to Cloudinary.</p>
                 }
               }
             } @else {
@@ -363,6 +381,7 @@ export class CertificateTemplateComponent implements OnInit, OnDestroy {
   loading = signal(true);
   saving = signal(false);
   previewing = signal(false);
+  uploadingImage = signal(false);
   error = signal('');
   success = signal('');
   elements = signal<CertificateElement[]>([]);
@@ -370,6 +389,10 @@ export class CertificateTemplateComponent implements OnInit, OnDestroy {
   paperSize = signal<CertificatePaperSize>('short');
   selectedId = signal<string | null>(null);
   customFields = signal<{ tag: string; label: string }[]>([]);
+  // The principal's e-signature lives once in Certificate Settings (shared
+  // across every certificate type), not per-element — a 'signature' image
+  // element only stores its position/size and renders using this preview.
+  signatureImageUrl = signal<string>('');
 
   modalOpen = signal(false);
   modalUrl = signal<string | SafeResourceUrl | null>(null);
@@ -378,8 +401,17 @@ export class CertificateTemplateComponent implements OnInit, OnDestroy {
   private previewRawUrl: string | null = null;
   private previewBlob: Blob | null = null;
 
-  private dragState: { id: string; startX: number; startY: number; origX: number; origY: number } | null = null;
-  private resizeState: { id: string; startX: number; startY: number; origW: number; origH: number } | null = null;
+  private dragState: { id: string; startX: number; startY: number; origX: number; origY: number; snapshotted: boolean } | null = null;
+  private resizeState: { id: string; startX: number; startY: number; origW: number; origH: number; lockAspect: boolean; snapshotted: boolean } | null = null;
+
+  // Undo/redo history — a snapshot is pushed just BEFORE each discrete
+  // mutation (drag/resize start, add/delete/reorder, or the first edit of a
+  // properties-panel field), not on every intermediate change, so dragging
+  // an element or typing a sentence undoes as one step rather than one step
+  // per pixel/keystroke.
+  undoStack: CertificateElement[][] = [];
+  redoStack: CertificateElement[][] = [];
+  private readonly MAX_HISTORY = 50;
 
   constructor(private api: ApiService, private sanitizer: DomSanitizer) {}
 
@@ -393,6 +425,7 @@ export class CertificateTemplateComponent implements OnInit, OnDestroy {
             .filter((f) => f.name.trim())
             .map((f) => ({ tag: `{{${slugifyFieldName(f.name)}}}`, label: f.name }))
         );
+        this.signatureImageUrl.set(settings.signatory_signature || '');
       },
     });
   }
@@ -406,17 +439,56 @@ export class CertificateTemplateComponent implements OnInit, OnDestroy {
     this.revokePreview();
   }
 
-  // Delete/Backspace deletes the selected element — but not while the
-  // teacher is actually typing in the text/number fields in the properties
-  // panel, where Backspace must edit the field instead.
+  // Delete/Backspace deletes the selected element, and Ctrl/Cmd+Z / +Y (or
+  // +Shift+Z) undo/redo — but not while the teacher is actually typing in a
+  // text/number field in the properties panel, where these keys must behave
+  // like normal text editing instead (including the browser's own native
+  // per-field undo).
   private onKeyDown = (event: KeyboardEvent) => {
-    if (event.key !== 'Delete' && event.key !== 'Backspace') return;
     const target = event.target as HTMLElement | null;
-    if (target && ['INPUT', 'TEXTAREA'].includes(target.tagName)) return;
+    const inEditableField = !!target && ['INPUT', 'TEXTAREA'].includes(target.tagName);
+    const ctrlOrCmd = event.ctrlKey || event.metaKey;
+
+    if (!inEditableField && ctrlOrCmd && !event.shiftKey && event.key.toLowerCase() === 'z') {
+      event.preventDefault();
+      this.undo();
+      return;
+    }
+    if (!inEditableField && ctrlOrCmd && ((event.shiftKey && event.key.toLowerCase() === 'z') || event.key.toLowerCase() === 'y')) {
+      event.preventDefault();
+      this.redo();
+      return;
+    }
+
+    if (event.key !== 'Delete' && event.key !== 'Backspace') return;
+    if (inEditableField) return;
     if (!this.selectedEl()) return;
     event.preventDefault();
     this.deleteSelected();
   };
+
+  // Call BEFORE a mutation to make it undoable — see the MAX_HISTORY comment
+  // above for why this is called at discrete points rather than on every
+  // change event.
+  snapshotHistory() {
+    this.undoStack.push(this.elements());
+    if (this.undoStack.length > this.MAX_HISTORY) this.undoStack.shift();
+    this.redoStack = [];
+  }
+
+  undo() {
+    const prev = this.undoStack.pop();
+    if (!prev) return;
+    this.redoStack.push(this.elements());
+    this.elements.set(prev);
+  }
+
+  redo() {
+    const next = this.redoStack.pop();
+    if (!next) return;
+    this.undoStack.push(this.elements());
+    this.elements.set(next);
+  }
 
   round(n: number): number {
     return Math.round(n);
@@ -446,6 +518,7 @@ export class CertificateTemplateComponent implements OnInit, OnDestroy {
 
   setOrientation(next: CertificateOrientation) {
     if (next === this.orientation()) return;
+    this.snapshotHistory();
     this.elements.set(rescaleElements(this.elements(), pageDims(this.paperSize(), this.orientation()), pageDims(this.paperSize(), next)));
     this.orientation.set(next);
     this.selectedId.set(null);
@@ -453,6 +526,7 @@ export class CertificateTemplateComponent implements OnInit, OnDestroy {
 
   setPaperSize(next: CertificatePaperSize) {
     if (next === this.paperSize()) return;
+    this.snapshotHistory();
     this.elements.set(rescaleElements(this.elements(), pageDims(this.paperSize(), this.orientation()), pageDims(next, this.orientation())));
     this.paperSize.set(next);
     this.selectedId.set(null);
@@ -478,6 +552,8 @@ export class CertificateTemplateComponent implements OnInit, OnDestroy {
     this.error.set('');
     this.success.set('');
     this.selectedId.set(null);
+    this.undoStack = [];
+    this.redoStack = [];
     this.api.getCertificateTemplate(this.key()).subscribe({
       next: (tpl: CertificateTemplate) => {
         this.elements.set(tpl.elements);
@@ -494,6 +570,7 @@ export class CertificateTemplateComponent implements OnInit, OnDestroy {
   }
 
   addTextBox() {
+    this.snapshotHistory();
     const id = `text_${Date.now()}_${nextId++}`;
     const el: CertificateElement = {
       id, type: 'text', x: 200, y: 400, width: 200, height: 20,
@@ -504,6 +581,7 @@ export class CertificateTemplateComponent implements OnInit, OnDestroy {
   }
 
   addLogo() {
+    this.snapshotHistory();
     const id = `logo_${Date.now()}_${nextId++}`;
     const el: CertificateElement = { id, type: 'image', source: 'custom', x: 40, y: 40, width: 70, height: 70 };
     this.elements.set([...this.elements(), el]);
@@ -514,6 +592,33 @@ export class CertificateTemplateComponent implements OnInit, OnDestroy {
   triggerReplaceImage(id: string) {
     this.pendingLogoElementId = id;
     this.logoInputRef?.nativeElement.click();
+  }
+
+  hasSignatureElement(): boolean {
+    return this.elements().some((e) => e.type === 'image' && e.source === 'signature');
+  }
+
+  // Anchored just above the 'signature_line' element (wherever it currently
+  // is) so it lines up visually — matches the backend's auto-injection
+  // fallback position in certificateGenerator.js if signature_line was moved
+  // or removed. The actual image comes from Certificate Settings, not a
+  // per-element upload (see signatureImageUrl).
+  addSignature() {
+    if (this.hasSignatureElement()) return;
+    this.snapshotHistory();
+    const anchor: { x: number; y: number; width: number } =
+      this.elements().find((e) => e.id === 'signature_line') || { x: 166, y: 642, width: 280 };
+    const width = 150;
+    const height = 46;
+    const id = `signature_${Date.now()}_${nextId++}`;
+    const el: CertificateElement = {
+      id, type: 'image', source: 'signature',
+      x: Math.round(anchor.x + anchor.width / 2 - width / 2),
+      y: Math.round(anchor.y - height - 4),
+      width, height,
+    };
+    this.elements.set([...this.elements(), el]);
+    this.selectedId.set(id);
   }
 
   async onLogoFileSelected(event: Event) {
@@ -529,22 +634,33 @@ export class CertificateTemplateComponent implements OnInit, OnDestroy {
       return;
     }
 
+    this.uploadingImage.set(true);
+    this.error.set('');
     try {
-      const imageData = await this.resizeImageFile(file);
-      this.updateElement(id, { source: 'custom', imageData });
+      const croppedDataUri = await this.resizeImageFile(file);
+      const { url } = await firstValueFrom(this.api.uploadImage(croppedDataUri, 'certificate-logos'));
+      this.snapshotHistory();
+      this.updateElement(id, { source: 'custom', imageData: url });
     } catch {
-      this.error.set('Could not read that image file.');
+      this.error.set('Could not upload that image. Please try again.');
+    } finally {
+      this.uploadingImage.set(false);
     }
   }
 
   removeImage(id: string) {
+    this.snapshotHistory();
     this.updateElement(id, { imageData: undefined });
   }
 
-  // Downscales/recompresses the upload client-side so a saved template stays
-  // small — logos are typically simple graphics, not photos, so a modest
-  // max dimension keeps them crisp while bounding the stored data URI size.
-  private resizeImageFile(file: File, maxDim = 300, quality = 0.85): Promise<string> {
+  // Crops the upload client-side into a perfect circle that fully fills its
+  // frame — the source image is scaled to "cover" the circle (like CSS
+  // object-fit: cover), cropping any overflow rather than stretching the
+  // image or leaving empty space, so the logo never comes out warped/oval
+  // regardless of the uploaded photo's own aspect ratio. Always exported as
+  // PNG (regardless of the source format) so the transparent ring outside
+  // the circle is preserved when printed.
+  private resizeImageFile(file: File, maxDim = 300): Promise<string> {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onerror = () => reject(reader.error);
@@ -552,16 +668,24 @@ export class CertificateTemplateComponent implements OnInit, OnDestroy {
         const image = new Image();
         image.onerror = reject;
         image.onload = () => {
-          const scale = Math.min(1, maxDim / Math.max(image.width, image.height));
           const canvas = document.createElement('canvas');
-          canvas.width = Math.max(1, Math.round(image.width * scale));
-          canvas.height = Math.max(1, Math.round(image.height * scale));
+          canvas.width = maxDim;
+          canvas.height = maxDim;
           const ctx = canvas.getContext('2d');
           if (!ctx) return reject(new Error('Canvas not supported'));
-          ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
-          // PNG preserves transparency, which most logos rely on.
-          const isPng = file.type === 'image/png';
-          resolve(canvas.toDataURL(isPng ? 'image/png' : 'image/jpeg', quality));
+
+          ctx.save();
+          ctx.beginPath();
+          ctx.arc(maxDim / 2, maxDim / 2, maxDim / 2, 0, Math.PI * 2);
+          ctx.clip();
+
+          const coverScale = Math.max(maxDim / image.width, maxDim / image.height);
+          const drawWidth = image.width * coverScale;
+          const drawHeight = image.height * coverScale;
+          ctx.drawImage(image, (maxDim - drawWidth) / 2, (maxDim - drawHeight) / 2, drawWidth, drawHeight);
+          ctx.restore();
+
+          resolve(canvas.toDataURL('image/png'));
         };
         image.src = reader.result as string;
       };
@@ -575,6 +699,7 @@ export class CertificateTemplateComponent implements OnInit, OnDestroy {
     const arr = [...this.elements()];
     const i = arr.findIndex((e) => e.id === id);
     if (i < 0 || i === arr.length - 1) return;
+    this.snapshotHistory();
     [arr[i], arr[i + 1]] = [arr[i + 1], arr[i]];
     this.elements.set(arr);
   }
@@ -585,6 +710,7 @@ export class CertificateTemplateComponent implements OnInit, OnDestroy {
     const arr = [...this.elements()];
     const i = arr.findIndex((e) => e.id === id);
     if (i <= 0) return;
+    this.snapshotHistory();
     [arr[i], arr[i - 1]] = [arr[i - 1], arr[i]];
     this.elements.set(arr);
   }
@@ -592,12 +718,14 @@ export class CertificateTemplateComponent implements OnInit, OnDestroy {
   deleteSelected() {
     const id = this.selectedId();
     if (!id) return;
+    this.snapshotHistory();
     this.elements.set(this.elements().filter((e) => e.id !== id));
     this.selectedId.set(null);
   }
 
   resetToDefault() {
     if (!confirm('Reset to the default layout? This discards your current unsaved changes.')) return;
+    this.snapshotHistory();
     this.api.getCertificateTemplateDefaults(this.key()).subscribe({
       next: (tpl: CertificateTemplate) => {
         this.elements.set(tpl.elements);
@@ -607,6 +735,23 @@ export class CertificateTemplateComponent implements OnInit, OnDestroy {
       },
       error: () => this.error.set('Could not load the default layout.'),
     });
+  }
+
+  // Field chips are also draggable (see the field-chips template) as an
+  // alternative to click-to-insert — most browsers position the textarea's
+  // caret at the drop point as part of native drag-and-drop, so insertField
+  // (which inserts at the textarea's current selection) lands it there.
+  onFieldDragStart(event: DragEvent, tag: string) {
+    event.dataTransfer?.setData('text/plain', tag);
+    if (event.dataTransfer) event.dataTransfer.effectAllowed = 'copy';
+  }
+
+  onFieldDrop(event: DragEvent) {
+    event.preventDefault();
+    const tag = event.dataTransfer?.getData('text/plain');
+    if (!tag || !tag.startsWith('{{')) return;
+    this.snapshotHistory();
+    this.insertField(tag);
   }
 
   insertField(tag: string) {
@@ -639,13 +784,20 @@ export class CertificateTemplateComponent implements OnInit, OnDestroy {
   startDrag(event: MouseEvent, el: CertificateElement) {
     event.stopPropagation();
     this.selectedId.set(el.id);
-    this.dragState = { id: el.id, startX: event.clientX, startY: event.clientY, origX: el.x, origY: el.y };
+    this.dragState = { id: el.id, startX: event.clientX, startY: event.clientY, origX: el.x, origY: el.y, snapshotted: false };
     document.addEventListener('mousemove', this.onDragMove);
     document.addEventListener('mouseup', this.onDragEnd);
   }
 
   private onDragMove = (event: MouseEvent) => {
     if (!this.dragState) return;
+    // Snapshot on the first actual movement, not on mousedown — otherwise
+    // just clicking to select an element (without dragging) would waste an
+    // undo step on a no-op.
+    if (!this.dragState.snapshotted) {
+      this.snapshotHistory();
+      this.dragState.snapshotted = true;
+    }
     const dx = (event.clientX - this.dragState.startX) / SCALE;
     const dy = (event.clientY - this.dragState.startY) / SCALE;
     this.updateElement(this.dragState.id, {
@@ -665,19 +817,34 @@ export class CertificateTemplateComponent implements OnInit, OnDestroy {
   startResize(event: MouseEvent, el: CertificateElement) {
     event.stopPropagation();
     this.selectedId.set(el.id);
-    this.resizeState = { id: el.id, startX: event.clientX, startY: event.clientY, origW: el.width, origH: el.height };
+    // Uploaded logos are baked as a circle that fills its box (see
+    // resizeImageFile) — locking the aspect ratio here keeps that box square
+    // so a freehand resize can never stretch the circle into an oval.
+    const lockAspect = el.type === 'image' && el.source === 'custom';
+    this.resizeState = { id: el.id, startX: event.clientX, startY: event.clientY, origW: el.width, origH: el.height, lockAspect, snapshotted: false };
     document.addEventListener('mousemove', this.onResizeMove);
     document.addEventListener('mouseup', this.onResizeEnd);
   }
 
   private onResizeMove = (event: MouseEvent) => {
     if (!this.resizeState) return;
+    // Snapshot on the first actual movement, not on mousedown (see onDragMove).
+    if (!this.resizeState.snapshotted) {
+      this.snapshotHistory();
+      this.resizeState.snapshotted = true;
+    }
     const dx = (event.clientX - this.resizeState.startX) / SCALE;
     const dy = (event.clientY - this.resizeState.startY) / SCALE;
-    this.updateElement(this.resizeState.id, {
-      width: Math.max(MIN_SIZE, Math.round(this.resizeState.origW + dx)),
-      height: Math.max(0, Math.round(this.resizeState.origH + dy)),
-    });
+    if (this.resizeState.lockAspect) {
+      const delta = (dx + dy) / 2;
+      const size = Math.max(MIN_SIZE, Math.round(this.resizeState.origW + delta));
+      this.updateElement(this.resizeState.id, { width: size, height: size });
+    } else {
+      this.updateElement(this.resizeState.id, {
+        width: Math.max(MIN_SIZE, Math.round(this.resizeState.origW + dx)),
+        height: Math.max(0, Math.round(this.resizeState.origH + dy)),
+      });
+    }
   };
 
   private onResizeEnd = () => {

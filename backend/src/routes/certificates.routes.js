@@ -47,6 +47,7 @@ router.get('/sample.pdf', requireAuth, async (req, res) => {
     signatoryName: settings.signatory_name,
     signatoryTitle: settings.signatory_title,
     customFields: settings.custom_fields,
+    signatureDataUrl: settings.signatory_signature,
   }, res);
 });
 
@@ -114,6 +115,7 @@ router.get('/bulk.pdf', requireAuth, async (req, res) => {
     const docDefinition = await buildCertificateDocDefinitionMultiSheet(entries, {
       paperSize: template.paper_size,
       orientation: template.orientation,
+      signatureDataUrl: settings.signatory_signature,
     });
 
     res.set('Content-Type', 'application/pdf');
@@ -164,6 +166,7 @@ router.get('/:studentId.pdf', requireAuth, async (req, res) => {
       signatoryName: settings.signatory_name,
       signatoryTitle: settings.signatory_title,
       customFields: settings.custom_fields,
+      signatureDataUrl: settings.signatory_signature,
       template,
     }, res);
   } catch (err) {
