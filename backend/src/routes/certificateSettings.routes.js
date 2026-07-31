@@ -4,7 +4,7 @@ const { getSettings, saveSettings } = require('../utils/certificateSettingsStore
 
 const router = express.Router();
 
-const FIELDS = ['office_line', 'signatory_name', 'signatory_title', 'date_range', 'venue'];
+const FIELDS = ['office_line', 'signatory_name', 'signatory_title', 'date_range', 'venue', 'event_name'];
 const MAX_LENGTH = 200;
 const MAX_CUSTOM_FIELDS = 20;
 const MAX_CUSTOM_NAME_LENGTH = 60;

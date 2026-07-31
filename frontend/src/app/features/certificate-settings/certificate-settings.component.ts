@@ -16,8 +16,8 @@ import { cropImageToCoverCircle } from '../../core/utils/circularImage';
       <h1 class="headline">Certificate Settings</h1>
       <p class="lede">
         These values fill in the matching <code>{{ '{{placeholder}}' }}</code> tags on every certificate
-        (the Certificate Designer's "Office / Division", "Signatory Name", "Signatory Title", "Date" and "Venue"
-        fields). Update them here once per event instead of editing every certificate individually.
+        (the Certificate Designer's "Office / Division", "Signatory Name", "Signatory Title", "Date", "Venue"
+        and "Event Name" fields). Update them here once per event instead of editing every certificate individually.
       </p>
 
       <form class="card" (ngSubmit)="save()">
@@ -38,6 +38,10 @@ import { cropImageToCoverCircle } from '../../core/utils/circularImage';
 
           <label style="margin-top:12px;">Venue</label>
           <input name="venue" [(ngModel)]="form.venue" placeholder="e.g. the school auditorium" />
+
+          <label style="margin-top:12px;">Event Name</label>
+          <input name="event_name" [(ngModel)]="form.event_name" placeholder="e.g. School Press Conference" />
+          <p class="hint" style="margin-top:0;">Fills in <code>{{ '{{event_name}}' }}</code> on the ranking, speaker/lecturer, and teacher certificates.</p>
 
           <label style="margin-top:12px;">School Logo</label>
           @if (form.school_logo) {

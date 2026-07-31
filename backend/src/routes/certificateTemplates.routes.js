@@ -140,6 +140,7 @@ router.post('/:key/preview.pdf', requireAuth, requireAdmin, async (req, res) => 
         student: sampleStudent,
         categoryName: 'News Writing',
         rank: 1,
+        eventName: settings.event_name,
         schoolName: 'Your School Name',
         dateRange: settings.date_range,
         venue: settings.venue,
@@ -154,6 +155,7 @@ router.post('/:key/preview.pdf', requireAuth, requireAdmin, async (req, res) => 
     } else if (key === 'speaker') {
       await renderSpeakerCertificatePdf({
         speaker: { full_name: 'Juan Dela Cruz', position: 'Senior Reporter', organization: 'Philippine Daily Inquirer', topic: 'The Future of Campus Journalism' },
+        eventName: settings.event_name,
         dateRange: settings.date_range,
         venue: settings.venue,
         officeLine: settings.office_line,
@@ -167,6 +169,7 @@ router.post('/:key/preview.pdf', requireAuth, requireAdmin, async (req, res) => 
     } else {
       await renderTeacherCertificatePdf({
         teacher: { full_name: 'Juan Dela Cruz', role: 'Facilitator', department: 'Journalism Department', topic: 'News Writing Workshop' },
+        eventName: settings.event_name,
         dateRange: settings.date_range,
         venue: settings.venue,
         officeLine: settings.office_line,

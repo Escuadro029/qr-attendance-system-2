@@ -87,7 +87,7 @@ router.get('/bulk.pdf', requireAuth, async (req, res) => {
     const entries = result.rows.map((speaker) => {
       const { mergeData, controlNo } = buildSpeakerMergeData({
         speaker,
-        eventName: req.query.event || 'School Press Conference',
+        eventName: req.query.event || settings.event_name || 'School Press Conference',
         dateRange: req.query.dates || settings.date_range,
         venue: req.query.venue || settings.venue,
         officeLine: req.query.division || settings.office_line,
@@ -133,7 +133,7 @@ router.get('/:id/certificate.pdf', requireAuth, async (req, res) => {
     res.set('Content-Disposition', `inline; filename="certificate-${safeFilename(speaker.full_name)}.pdf"`);
     await renderSpeakerCertificatePdf({
       speaker,
-      eventName: req.query.event || 'School Press Conference',
+      eventName: req.query.event || settings.event_name || 'School Press Conference',
       dateRange: req.query.dates || settings.date_range,
       venue: req.query.venue || settings.venue,
       officeLine: req.query.division || settings.office_line,

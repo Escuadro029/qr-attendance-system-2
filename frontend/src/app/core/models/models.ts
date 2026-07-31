@@ -144,6 +144,7 @@ export interface CertificateSettings {
   signatory_title?: string;
   date_range?: string;
   venue?: string;
+  event_name?: string;
   custom_fields?: CertificateCustomField[];
   signatory_signature?: string;
   school_logo?: string;
