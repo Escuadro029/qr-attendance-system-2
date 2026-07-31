@@ -338,32 +338,28 @@ async function buildCertificateDocDefinition({ elements, mergeData, qrToken, con
 }
 
 /**
- * Lays out many already-built certificate entries two-per-sheet — as two
- * full-height columns side by side (one vertical cut down the middle) — on
- * a sheet that's ALWAYS portrait, regardless of the certificate's own
- * configured orientation, so printing certificates for a whole class uses
- * half as much bond paper. Side-by-side (rather than stacked top/bottom)
- * means each certificate fills its column edge to edge with no blank strip
- * down the sides — the leftover blank space lands above/below instead,
- * which is a normal-looking margin rather than something that needs
- * trimming after cutting. `entries` is a flat list of
+ * Lays out many already-built certificate entries two-per-sheet — stacked
+ * top/bottom (one horizontal cut across the middle) — on a sheet that's
+ * ALWAYS portrait, regardless of the certificate's own configured
+ * orientation, so printing certificates for a whole class uses half as much
+ * bond paper. `entries` is a flat list of
  * `{ elements, mergeData, qrToken, controlNo }`; consecutive pairs share a
- * sheet, and a trailing odd entry gets a sheet to itself (blank right column).
+ * sheet, and a trailing odd entry gets a sheet to itself (blank bottom half).
  */
 async function buildCertificateDocDefinitionMultiSheet(entries, { paperSize, orientation, signatureDataUrl, logoDataUrl }) {
   const sheetDims = pageDims(paperSize, 'portrait');
   // The space the saved elements are actually positioned in — normally the
   // same as sheetDims (most certificates are portrait already), but computed
   // separately so a landscape-configured template still scales down without
-  // overflowing its column.
+  // overflowing its half.
   const tplDims = pageDims(paperSize, orientation);
-  const slotWidth = sheetDims.width / 2;
-  const scale = Math.min(slotWidth / tplDims.width, sheetDims.height / tplDims.height);
+  const slotHeight = sheetDims.height / 2;
+  const scale = Math.min(sheetDims.width / tplDims.width, slotHeight / tplDims.height);
   const scaledWidth = tplDims.width * scale;
   const scaledHeight = tplDims.height * scale;
-  const offsetY = (sheetDims.height - scaledHeight) / 2;
-  const leftOffsetX = (slotWidth - scaledWidth) / 2;
-  const rightOffsetX = slotWidth + leftOffsetX;
+  const offsetX = (sheetDims.width - scaledWidth) / 2;
+  const topOffsetY = (slotHeight - scaledHeight) / 2;
+  const bottomOffsetY = slotHeight + topOffsetY;
   // Shared across every entry so a logo/signature URL common to the whole
   // batch (the usual case) is only fetched from Cloudinary once.
   const imageCache = new Map();
@@ -375,16 +371,16 @@ async function buildCertificateDocDefinitionMultiSheet(entries, { paperSize, ori
     if (content.length > 0) sheetContent.push({ text: '', pageBreak: 'before' });
 
     if (a) {
-      const aElements = scaleElements(withAutoLogo(withAutoSignature(a.elements, signatureDataUrl), logoDataUrl), scale, leftOffsetX, offsetY);
+      const aElements = scaleElements(withAutoLogo(withAutoSignature(a.elements, signatureDataUrl), logoDataUrl), scale, offsetX, topOffsetY);
       sheetContent.push(...await buildCertificateContentNodes(aElements, a.mergeData, a.qrToken, a.controlNo, signatureDataUrl, logoDataUrl, imageCache));
     }
     if (b) {
-      const bElements = scaleElements(withAutoLogo(withAutoSignature(b.elements, signatureDataUrl), logoDataUrl), scale, rightOffsetX, offsetY);
+      const bElements = scaleElements(withAutoLogo(withAutoSignature(b.elements, signatureDataUrl), logoDataUrl), scale, offsetX, bottomOffsetY);
       sheetContent.push(...await buildCertificateContentNodes(bElements, b.mergeData, b.qrToken, b.controlNo, signatureDataUrl, logoDataUrl, imageCache));
     }
 
     sheetContent.push({
-      canvas: [{ type: 'line', x1: slotWidth, y1: 20, x2: slotWidth, y2: sheetDims.height - 20, lineColor: '#cccccc', dash: { length: 4, space: 3 }, lineWidth: 0.75 }],
+      canvas: [{ type: 'line', x1: 20, y1: slotHeight, x2: sheetDims.width - 20, y2: slotHeight, lineColor: '#cccccc', dash: { length: 4, space: 3 }, lineWidth: 0.75 }],
       absolutePosition: { x: 0, y: 0 },
     });
 
