@@ -117,7 +117,7 @@ export interface CertificateElement {
   fillColor?: string;
   cornerRadius?: number;
   // image
-  source?: 'qr' | 'custom' | 'signature';
+  source?: 'qr' | 'custom' | 'signature' | 'logo';
   imageData?: string; // base64 data URI, for source: 'custom' (an uploaded logo)
 }
 
@@ -146,6 +146,7 @@ export interface CertificateSettings {
   venue?: string;
   custom_fields?: CertificateCustomField[];
   signatory_signature?: string;
+  school_logo?: string;
   updated_at?: string;
 }
 

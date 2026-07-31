@@ -5,6 +5,7 @@ import { firstValueFrom } from 'rxjs';
 import { ApiService } from '../../core/services/api.service';
 import { CertificateCustomField, CertificateSettings } from '../../core/models/models';
 import { slugifyFieldName } from '../../core/utils/slugify';
+import { cropImageToCoverCircle } from '../../core/utils/circularImage';
 
 @Component({
   selector: 'app-certificate-settings',
@@ -37,6 +38,24 @@ import { slugifyFieldName } from '../../core/utils/slugify';
 
           <label style="margin-top:12px;">Venue</label>
           <input name="venue" [(ngModel)]="form.venue" placeholder="e.g. the school auditorium" />
+
+          <label style="margin-top:12px;">School Logo</label>
+          @if (form.school_logo) {
+            <img class="logo-preview" [src]="form.school_logo" alt="School logo preview" />
+          }
+          <div class="style-row">
+            <button type="button" class="btn btn-outline btn-sm" (click)="logoInput.click()" [disabled]="uploadingLogo()">
+              {{ uploadingLogo() ? 'Uploading…' : (form.school_logo ? 'Replace Logo' : 'Upload Logo') }}
+            </button>
+            @if (form.school_logo) {
+              <button type="button" class="btn btn-outline btn-sm" (click)="removeLogo()" [disabled]="uploadingLogo()">Remove</button>
+            }
+          </div>
+          <input #logoInput type="file" accept="image/png,image/jpeg" hidden (change)="onLogoFileSelected($event)" />
+          <p class="hint" style="margin-top:6px;">
+            Uploaded once here (to Cloudinary), cropped into a circle, and automatically included in place of the
+            "Official Seal" on every certificate type — no need to add it separately in the Certificate Designer.
+          </p>
 
           <label style="margin-top:12px;">Principal's E-Signature</label>
           @if (form.signatory_signature) {
@@ -105,12 +124,14 @@ import { slugifyFieldName } from '../../core/utils/slugify';
     .tag-preview { font-family: monospace; font-size: 0.72rem; color: var(--navy); background: rgba(31,41,61,0.06); padding: 2px 6px; border-radius: 999px; white-space: nowrap; }
     .style-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
     .signature-preview { display: block; max-width: 220px; max-height: 80px; margin-bottom: 8px; border: 1px solid var(--border); border-radius: 4px; background: repeating-linear-gradient(45deg, #f5f5f5, #f5f5f5 6px, #fff 6px, #fff 12px); }
+    .logo-preview { display: block; width: 80px; height: 80px; margin-bottom: 8px; border: 1px solid var(--border); border-radius: 50%; object-fit: cover; background: repeating-linear-gradient(45deg, #f5f5f5, #f5f5f5 6px, #fff 6px, #fff 12px); }
   `],
 })
 export class CertificateSettingsComponent implements OnInit {
   loading = signal(true);
   saving = signal(false);
   uploadingSignature = signal(false);
+  uploadingLogo = signal(false);
   error = signal('');
   success = signal('');
   form: CertificateSettings = { custom_fields: [] };
@@ -174,6 +195,34 @@ export class CertificateSettingsComponent implements OnInit {
 
   removeSignature() {
     this.form.signatory_signature = undefined;
+  }
+
+  async onLogoFileSelected(event: Event) {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0] ?? null;
+    input.value = ''; // allow re-selecting the same file again later
+    if (!file) return;
+
+    if (!['image/png', 'image/jpeg'].includes(file.type)) {
+      this.error.set('Logo must be a PNG or JPEG image.');
+      return;
+    }
+
+    this.uploadingLogo.set(true);
+    this.error.set('');
+    try {
+      const croppedDataUri = await cropImageToCoverCircle(file);
+      const { url } = await firstValueFrom(this.api.uploadImage(croppedDataUri, 'certificate-logos'));
+      this.form.school_logo = url;
+    } catch {
+      this.error.set('Could not upload that image. Please try again.');
+    } finally {
+      this.uploadingLogo.set(false);
+    }
+  }
+
+  removeLogo() {
+    this.form.school_logo = undefined;
   }
 
   // Downscales the upload client-side so a saved signature stays small — a

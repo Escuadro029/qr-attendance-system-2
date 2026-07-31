@@ -8,15 +8,15 @@ const FIELDS = ['office_line', 'signatory_name', 'signatory_title', 'date_range'
 const MAX_LENGTH = 200;
 const MAX_CUSTOM_FIELDS = 20;
 const MAX_CUSTOM_NAME_LENGTH = 60;
-const MAX_SIGNATURE_DATA_LENGTH = 300_000; // ~225KB decoded — plenty for a small signature scan
+const MAX_IMAGE_FIELD_LENGTH = 300_000; // ~225KB decoded — plenty for a small signature/logo image
 
-function isValidSignature(signature) {
-  if (signature === undefined || signature === null || signature === '') return true;
-  if (typeof signature !== 'string' || signature.length > MAX_SIGNATURE_DATA_LENGTH) return false;
-  // The signature is hosted on Cloudinary (see uploads.routes.js); the
-  // data: form is only kept for backward compatibility with anything saved
-  // before that migration.
-  return /^data:image\/(png|jpe?g);base64,/.test(signature) || /^https:\/\/res\.cloudinary\.com\//.test(signature);
+// Shared by signatory_signature and school_logo — both are hosted on
+// Cloudinary (see uploads.routes.js); the data: form is only kept for
+// backward compatibility with anything saved before that migration.
+function isValidImageField(value) {
+  if (value === undefined || value === null || value === '') return true;
+  if (typeof value !== 'string' || value.length > MAX_IMAGE_FIELD_LENGTH) return false;
+  return /^data:image\/(png|jpe?g);base64,/.test(value) || /^https:\/\/res\.cloudinary\.com\//.test(value);
 }
 
 function isValidCustomFields(customFields) {
@@ -64,10 +64,15 @@ router.put('/', requireAuth, requireAdmin, async (req, res) => {
     .map((f) => ({ name: f.name.trim(), value: f.value.trim() }))
     .filter((f) => f.name);
 
-  if (!isValidSignature(req.body.signatory_signature)) {
-    return res.status(400).json({ error: 'signatory_signature must be a PNG or JPEG data URI' });
+  if (!isValidImageField(req.body.signatory_signature)) {
+    return res.status(400).json({ error: 'signatory_signature must be a PNG or JPEG image' });
   }
   fields.signatory_signature = req.body.signatory_signature || null;
+
+  if (!isValidImageField(req.body.school_logo)) {
+    return res.status(400).json({ error: 'school_logo must be a PNG or JPEG image' });
+  }
+  fields.school_logo = req.body.school_logo || null;
 
   try {
     res.json(await saveSettings(req.user.tenant_id, fields));

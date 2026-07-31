@@ -7,6 +7,7 @@ import { ApiService } from '../../core/services/api.service';
 import { CertificateElement, CertificateKey, CertificateOrientation, CertificatePaperSize, CertificateTemplate } from '../../core/models/models';
 import { DocumentModalComponent } from '../../shared/components/document-modal/document-modal.component';
 import { slugifyFieldName } from '../../core/utils/slugify';
+import { cropImageToCoverCircle } from '../../core/utils/circularImage';
 
 const SCALE = 0.72;
 const MIN_SIZE = 10;
@@ -125,6 +126,7 @@ let nextId = 0;
         </div>
         <button class="btn btn-outline btn-sm" (click)="addTextBox()">+ Add Text Box</button>
         <button class="btn btn-outline btn-sm" (click)="addLogo()">+ Add Logo</button>
+        <button class="btn btn-outline btn-sm" (click)="addSchoolLogo()" [disabled]="hasSchoolLogoElement()">+ Add School Logo</button>
         <button class="btn btn-outline btn-sm" (click)="addSignature()" [disabled]="hasSignatureElement()">+ Add Signature</button>
         <button class="btn btn-outline btn-sm" (click)="bringForward()" [disabled]="!selectedEl()">Bring Forward</button>
         <button class="btn btn-outline btn-sm" (click)="sendBackward()" [disabled]="!selectedEl()">Send Backward</button>
@@ -156,6 +158,7 @@ let nextId = 0;
                 <div
                   class="el-box"
                   [class.selected]="selectedId() === el.id"
+                  [class.text-box]="el.type === 'text'"
                   [style.left.px]="el.x * SCALE"
                   [style.top.px]="el.y * SCALE"
                   [style.width.px]="el.width * SCALE"
@@ -194,6 +197,12 @@ let nextId = 0;
                         } @else {
                           <div class="el-qr">SIGNATURE</div>
                         }
+                      } @else if (el.source === 'logo') {
+                        @if (logoImageUrl()) {
+                          <img class="el-image" [src]="logoImageUrl()" alt="" />
+                        } @else {
+                          <div class="el-qr">SCHOOL LOGO</div>
+                        }
                       } @else if (el.imageData) {
                         <img class="el-image" [src]="el.imageData" alt="" />
                       } @else if (el.source === 'qr') {
@@ -221,7 +230,7 @@ let nextId = 0;
               <div class="pos-grid">
                 <label>X <input type="number" [ngModel]="round(el.x)" (focus)="snapshotHistory()" (ngModelChange)="updateElement(el.id, { x: $event })" /></label>
                 <label>Y <input type="number" [ngModel]="round(el.y)" (focus)="snapshotHistory()" (ngModelChange)="updateElement(el.id, { y: $event })" /></label>
-                <label>Width <input type="number" [ngModel]="round(el.width)" (focus)="snapshotHistory()" (ngModelChange)="updateElement(el.id, { width: $event })" /></label>
+                <label>Width <input type="number" [ngModel]="round(el.width)" (focus)="snapshotHistory()" (ngModelChange)="updateElementAndGrow(el.id, { width: $event })" /></label>
                 <label>Height <input type="number" [ngModel]="round(el.height)" (focus)="snapshotHistory()" (ngModelChange)="updateElement(el.id, { height: $event })" /></label>
               </div>
 
@@ -235,14 +244,15 @@ let nextId = 0;
                 </div>
 
                 <label class="block-label">Text</label>
-                <textarea #textArea rows="4" [ngModel]="el.text" (focus)="snapshotHistory()" (ngModelChange)="updateElement(el.id, { text: $event })" (drop)="onFieldDrop($event)" (dragover)="$event.preventDefault()"></textarea>
+                <textarea #textArea rows="4" [ngModel]="el.text" (focus)="snapshotHistory()" (ngModelChange)="updateElementAndGrow(el.id, { text: $event })" (drop)="onFieldDrop($event)" (dragover)="$event.preventDefault()"></textarea>
                 <button type="button" class="btn btn-outline btn-sm" style="margin-top:6px;" (click)="snapshotHistory(); wrapBold()">Bold selected text</button>
+                <p class="hint" style="margin-top:6px;">The box grows taller automatically if the text no longer fits — it never shrinks on its own, so resize it smaller yourself if you want to reclaim the space.</p>
 
                 <div class="style-row">
-                  <label>Size <input type="number" min="4" [ngModel]="el.fontSize || 11" (focus)="snapshotHistory()" (ngModelChange)="updateElement(el.id, { fontSize: $event })" /></label>
-                  <button type="button" class="chip-btn" [class.active]="el.bold" (click)="snapshotHistory(); updateElement(el.id, { bold: !el.bold })">Bold</button>
-                  <button type="button" class="chip-btn" [class.active]="el.italics" (click)="snapshotHistory(); updateElement(el.id, { italics: !el.italics })">Italic</button>
-                  <button type="button" class="chip-btn" [class.active]="el.uppercase" (click)="snapshotHistory(); updateElement(el.id, { uppercase: !el.uppercase })">CAPS</button>
+                  <label>Size <input type="number" min="4" [ngModel]="el.fontSize || 11" (focus)="snapshotHistory()" (ngModelChange)="updateElementAndGrow(el.id, { fontSize: $event })" /></label>
+                  <button type="button" class="chip-btn" [class.active]="el.bold" (click)="snapshotHistory(); updateElementAndGrow(el.id, { bold: !el.bold })">Bold</button>
+                  <button type="button" class="chip-btn" [class.active]="el.italics" (click)="snapshotHistory(); updateElementAndGrow(el.id, { italics: !el.italics })">Italic</button>
+                  <button type="button" class="chip-btn" [class.active]="el.uppercase" (click)="snapshotHistory(); updateElementAndGrow(el.id, { uppercase: !el.uppercase })">CAPS</button>
                 </div>
                 <div class="style-row">
                   @for (a of aligns; track a) {
@@ -250,11 +260,11 @@ let nextId = 0;
                   }
                 </div>
                 <div class="style-row">
-                  <button type="button" class="chip-btn" [class.active]="!el.fontFamily || el.fontFamily === 'sans'" (click)="snapshotHistory(); updateElement(el.id, { fontFamily: 'sans' })">Sans</button>
-                  <button type="button" class="chip-btn" [class.active]="el.fontFamily === 'serif'" (click)="snapshotHistory(); updateElement(el.id, { fontFamily: 'serif' })">Serif</button>
-                  <button type="button" class="chip-btn" [class.active]="el.fontFamily === 'oldenglish'" (click)="snapshotHistory(); updateElement(el.id, { fontFamily: 'oldenglish' })">Old English MT</button>
-                  <button type="button" class="chip-btn" [class.active]="el.fontFamily === 'trajanpro'" (click)="snapshotHistory(); updateElement(el.id, { fontFamily: 'trajanpro' })">Trajan Pro</button>
-                  <button type="button" class="chip-btn" [class.active]="el.fontFamily === 'tahoma'" (click)="snapshotHistory(); updateElement(el.id, { fontFamily: 'tahoma' })">Tahoma</button>
+                  <button type="button" class="chip-btn" [class.active]="!el.fontFamily || el.fontFamily === 'sans'" (click)="snapshotHistory(); updateElementAndGrow(el.id, { fontFamily: 'sans' })">Sans</button>
+                  <button type="button" class="chip-btn" [class.active]="el.fontFamily === 'serif'" (click)="snapshotHistory(); updateElementAndGrow(el.id, { fontFamily: 'serif' })">Serif</button>
+                  <button type="button" class="chip-btn" [class.active]="el.fontFamily === 'oldenglish'" (click)="snapshotHistory(); updateElementAndGrow(el.id, { fontFamily: 'oldenglish' })">Old English MT</button>
+                  <button type="button" class="chip-btn" [class.active]="el.fontFamily === 'trajanpro'" (click)="snapshotHistory(); updateElementAndGrow(el.id, { fontFamily: 'trajanpro' })">Trajan Pro</button>
+                  <button type="button" class="chip-btn" [class.active]="el.fontFamily === 'tahoma'" (click)="snapshotHistory(); updateElementAndGrow(el.id, { fontFamily: 'tahoma' })">Tahoma</button>
                   <label class="color-label">Color <input type="color" [ngModel]="el.color || '#2D3748'" (focus)="snapshotHistory()" (ngModelChange)="updateElement(el.id, { color: $event })" /></label>
                 </div>
               }
@@ -284,6 +294,11 @@ let nextId = 0;
                     <img class="logo-preview" [src]="signatureImageUrl()" alt="" />
                   }
                   <p class="hint">This is the principal's e-signature, set once in <a routerLink="/certificate-settings">Certificate Settings</a> — you can move and resize it here, but upload or replace the image itself there.</p>
+                } @else if (el.source === 'logo') {
+                  @if (logoImageUrl()) {
+                    <img class="logo-preview" [src]="logoImageUrl()" alt="" />
+                  }
+                  <p class="hint">This is the school logo, set once in <a routerLink="/certificate-settings">Certificate Settings</a> — you can move and resize it here, but upload or replace the image itself there.</p>
                 } @else {
                   @if (el.imageData) {
                     <img class="logo-preview" [src]="el.imageData" alt="" />
@@ -334,9 +349,14 @@ let nextId = 0;
     .page-canvas { position: relative; background: #fff; box-shadow: var(--shadow); margin: 0 auto; }
 
     .el-box { position: absolute; box-sizing: border-box; border: 1px dashed transparent; cursor: move; overflow: hidden; user-select: none; }
+    /* Text boxes auto-grow (see growTextBoxIfNeeded), but the measurement is
+       only an approximation of the real PDF fonts — staying visible rather
+       than hidden means any brief mismatch shows as visible overflow instead
+       of silently-clipped (invisible) text. */
+    .el-box.text-box { overflow: visible; }
     .el-box:hover { border-color: rgba(43,108,176,0.6); }
     .el-box.selected { border: 1px solid var(--navy); box-shadow: 0 0 0 2px rgba(43,108,176,0.25); }
-    .el-text { width: 100%; height: 100%; white-space: pre-wrap; overflow: hidden; line-height: 1.25; }
+    .el-text { width: 100%; height: 100%; white-space: pre-wrap; overflow: visible; line-height: 1.25; }
     .el-line { width: 100%; margin-top: auto; margin-bottom: auto; }
     .el-shape { width: 100%; height: 100%; box-sizing: border-box; border-style: solid; }
     .el-shape.ellipse { border-radius: 50% !important; }
@@ -393,6 +413,9 @@ export class CertificateTemplateComponent implements OnInit, OnDestroy {
   // across every certificate type), not per-element — a 'signature' image
   // element only stores its position/size and renders using this preview.
   signatureImageUrl = signal<string>('');
+  // Same idea for the school logo — a 'logo' image element renders using
+  // this preview instead of storing its own imageData.
+  logoImageUrl = signal<string>('');
 
   modalOpen = signal(false);
   modalUrl = signal<string | SafeResourceUrl | null>(null);
@@ -426,6 +449,7 @@ export class CertificateTemplateComponent implements OnInit, OnDestroy {
             .map((f) => ({ tag: `{{${slugifyFieldName(f.name)}}}`, label: f.name }))
         );
         this.signatureImageUrl.set(settings.signatory_signature || '');
+        this.logoImageUrl.set(settings.school_logo || '');
       },
     });
   }
@@ -569,6 +593,43 @@ export class CertificateTemplateComponent implements OnInit, OnDestroy {
     this.elements.set(this.elements().map((e) => (e.id === id ? { ...e, ...patch } : e)));
   }
 
+  // Same as updateElement, but for text boxes also grows the box afterward
+  // if the change (new text, a bigger font, a narrower width, bold, etc.)
+  // means the content no longer fits — see growTextBoxIfNeeded.
+  updateElementAndGrow(id: string, patch: Partial<CertificateElement>) {
+    this.updateElement(id, patch);
+    this.growTextBoxIfNeeded(id);
+  }
+
+  // Measures how tall this text box's content actually needs to be (using a
+  // hidden, identically-styled mirror element) and grows el.height to fit if
+  // it's currently too short. Never shrinks — deliberately one-directional,
+  // like most slide/document editors, so it doesn't fight a size the admin
+  // picked on purpose. The measurement is a browser-rendered approximation of
+  // the real PDF fonts (Roboto/Tinos/OldEnglish/etc aren't what the browser
+  // actually renders with), so a 15% safety margin is added to make
+  // under-measuring (and clipping real content) unlikely.
+  private growTextBoxIfNeeded(id: string) {
+    const el = this.elements().find((e) => e.id === id);
+    if (!el || el.type !== 'text') return;
+
+    const measurer = document.createElement('div');
+    measurer.style.cssText = [
+      'position:absolute', 'visibility:hidden', 'pointer-events:none', 'left:-9999px', 'top:0',
+      `width:${el.width}px`, 'white-space:pre-wrap', 'line-height:1.25',
+      `font-size:${el.fontSize || 11}px`, `font-weight:${el.bold ? 700 : 400}`, `font-style:${el.italics ? 'italic' : 'normal'}`,
+      `font-family:${this.fontFamilyCss(el.fontFamily)}`, `text-transform:${el.uppercase ? 'uppercase' : 'none'}`,
+    ].join(';');
+    measurer.textContent = (el.text || '').replace(/\*\*/g, '');
+    document.body.appendChild(measurer);
+    const neededHeight = Math.ceil(measurer.scrollHeight * 1.15);
+    document.body.removeChild(measurer);
+
+    if (neededHeight > el.height) {
+      this.updateElement(id, { height: neededHeight });
+    }
+  }
+
   addTextBox() {
     this.snapshotHistory();
     const id = `text_${Date.now()}_${nextId++}`;
@@ -621,6 +682,29 @@ export class CertificateTemplateComponent implements OnInit, OnDestroy {
     this.selectedId.set(id);
   }
 
+  hasSchoolLogoElement(): boolean {
+    return this.elements().some((e) => e.type === 'image' && e.source === 'logo');
+  }
+
+  // Sized/positioned to exactly match the 'seal_circle' element (so it
+  // visually replaces the "Official Seal" circle+label) — matches the
+  // backend's auto-injection fallback in certificateGenerator.js if
+  // seal_circle was moved or removed. The actual image comes from
+  // Certificate Settings, not a per-element upload (see logoImageUrl).
+  addSchoolLogo() {
+    if (this.hasSchoolLogoElement()) return;
+    this.snapshotHistory();
+    const anchor: { x: number; y: number; width: number; height: number } =
+      this.elements().find((e) => e.id === 'seal_circle') || { x: 280, y: 29, width: 52, height: 52 };
+    const id = `logo_${Date.now()}_${nextId++}`;
+    const el: CertificateElement = {
+      id, type: 'image', source: 'logo',
+      x: anchor.x, y: anchor.y, width: anchor.width, height: anchor.height,
+    };
+    this.elements.set([...this.elements(), el]);
+    this.selectedId.set(id);
+  }
+
   async onLogoFileSelected(event: Event) {
     const input = event.target as HTMLInputElement;
     const file = input.files?.[0] ?? null;
@@ -653,44 +737,10 @@ export class CertificateTemplateComponent implements OnInit, OnDestroy {
     this.updateElement(id, { imageData: undefined });
   }
 
-  // Crops the upload client-side into a perfect circle that fully fills its
-  // frame — the source image is scaled to "cover" the circle (like CSS
-  // object-fit: cover), cropping any overflow rather than stretching the
-  // image or leaving empty space, so the logo never comes out warped/oval
-  // regardless of the uploaded photo's own aspect ratio. Always exported as
-  // PNG (regardless of the source format) so the transparent ring outside
-  // the circle is preserved when printed.
+  // See core/utils/circularImage.ts — crops the upload into a perfect,
+  // cover-fit circle (shared with Certificate Settings' school logo upload).
   private resizeImageFile(file: File, maxDim = 300): Promise<string> {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onerror = () => reject(reader.error);
-      reader.onload = () => {
-        const image = new Image();
-        image.onerror = reject;
-        image.onload = () => {
-          const canvas = document.createElement('canvas');
-          canvas.width = maxDim;
-          canvas.height = maxDim;
-          const ctx = canvas.getContext('2d');
-          if (!ctx) return reject(new Error('Canvas not supported'));
-
-          ctx.save();
-          ctx.beginPath();
-          ctx.arc(maxDim / 2, maxDim / 2, maxDim / 2, 0, Math.PI * 2);
-          ctx.clip();
-
-          const coverScale = Math.max(maxDim / image.width, maxDim / image.height);
-          const drawWidth = image.width * coverScale;
-          const drawHeight = image.height * coverScale;
-          ctx.drawImage(image, (maxDim - drawWidth) / 2, (maxDim - drawHeight) / 2, drawWidth, drawHeight);
-          ctx.restore();
-
-          resolve(canvas.toDataURL('image/png'));
-        };
-        image.src = reader.result as string;
-      };
-      reader.readAsDataURL(file);
-    });
+    return cropImageToCoverCircle(file, maxDim);
   }
 
   bringForward() {
@@ -763,6 +813,7 @@ export class CertificateTemplateComponent implements OnInit, OnDestroy {
     const end = textarea?.selectionEnd ?? current.length;
     const next = current.slice(0, start) + tag + current.slice(end);
     this.updateElement(el.id, { text: next });
+    this.growTextBoxIfNeeded(el.id);
     const caret = start + tag.length;
     setTimeout(() => textarea?.setSelectionRange(caret, caret));
   }
@@ -777,6 +828,7 @@ export class CertificateTemplateComponent implements OnInit, OnDestroy {
     if (start === end) return;
     const next = `${current.slice(0, start)}**${current.slice(start, end)}**${current.slice(end)}`;
     this.updateElement(el.id, { text: next });
+    this.growTextBoxIfNeeded(el.id);
   }
 
   // ---- Drag ----
@@ -817,10 +869,10 @@ export class CertificateTemplateComponent implements OnInit, OnDestroy {
   startResize(event: MouseEvent, el: CertificateElement) {
     event.stopPropagation();
     this.selectedId.set(el.id);
-    // Uploaded logos are baked as a circle that fills its box (see
+    // Uploaded/school logos are baked as a circle that fills its box (see
     // resizeImageFile) — locking the aspect ratio here keeps that box square
     // so a freehand resize can never stretch the circle into an oval.
-    const lockAspect = el.type === 'image' && el.source === 'custom';
+    const lockAspect = el.type === 'image' && (el.source === 'custom' || el.source === 'logo');
     this.resizeState = { id: el.id, startX: event.clientX, startY: event.clientY, origW: el.width, origH: el.height, lockAspect, snapshotted: false };
     document.addEventListener('mousemove', this.onResizeMove);
     document.addEventListener('mouseup', this.onResizeEnd);

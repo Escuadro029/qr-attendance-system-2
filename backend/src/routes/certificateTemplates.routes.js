@@ -132,6 +132,7 @@ router.post('/:key/preview.pdf', requireAuth, requireAdmin, async (req, res) => 
         signatoryTitle: settings.signatory_title,
         customFields: settings.custom_fields,
         signatureDataUrl: settings.signatory_signature,
+        logoDataUrl: settings.school_logo,
         template,
       }, res);
     } else if (key === 'ranking') {
@@ -147,6 +148,7 @@ router.post('/:key/preview.pdf', requireAuth, requireAdmin, async (req, res) => 
         signatoryTitle: settings.signatory_title,
         customFields: settings.custom_fields,
         signatureDataUrl: settings.signatory_signature,
+        logoDataUrl: settings.school_logo,
         template,
       }, res);
     } else if (key === 'speaker') {
@@ -159,6 +161,7 @@ router.post('/:key/preview.pdf', requireAuth, requireAdmin, async (req, res) => 
         signatoryTitle: settings.signatory_title,
         customFields: settings.custom_fields,
         signatureDataUrl: settings.signatory_signature,
+        logoDataUrl: settings.school_logo,
         template,
       }, res);
     } else {
@@ -171,6 +174,7 @@ router.post('/:key/preview.pdf', requireAuth, requireAdmin, async (req, res) => 
         signatoryTitle: settings.signatory_title,
         customFields: settings.custom_fields,
         signatureDataUrl: settings.signatory_signature,
+        logoDataUrl: settings.school_logo,
         template,
       }, res);
     }

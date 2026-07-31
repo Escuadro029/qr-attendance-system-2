@@ -191,24 +191,27 @@ function renderShapeElement(el) {
   return { canvas: [vector], absolutePosition: { x: 0, y: 0 } };
 }
 
-function renderImageElement(el, qrDataUrl, signatureDataUrl) {
-  // Uploaded logos are stored as a data URI directly on the element (in the
-  // same certificate_templates.elements JSONB, no separate file storage) —
-  // simplest option given Render's web service filesystem isn't persistent.
-  // The principal's e-signature instead lives once in certificate_settings
-  // (shared across every certificate type) and is passed in per-render.
+function renderImageElement(el, qrDataUrl, signatureDataUrl, logoDataUrl) {
+  // Uploaded per-element logos are stored as a data URI/Cloudinary URL
+  // directly on the element (in the same certificate_templates.elements
+  // JSONB). The principal's e-signature and the school logo instead live
+  // once in certificate_settings (shared across every certificate type) and
+  // are passed in per-render.
   const dataUrl =
     el.source === 'qr' ? qrDataUrl :
     el.source === 'signature' ? signatureDataUrl :
+    el.source === 'logo' ? logoDataUrl :
     el.source === 'custom' ? el.imageData : null;
   if (!dataUrl) return null;
   return { image: dataUrl, width: el.width, height: el.height, absolutePosition: { x: el.x, y: el.y } };
 }
 
-// Matches the shared 'signature_line' element in certificateTemplateDefaults.js
-// — used as a fallback anchor if a template's signature_line was customized
-// away entirely, so auto-injection still has somewhere sane to sit.
+// Matches the shared 'signature_line'/'seal_circle' elements in
+// certificateTemplateDefaults.js — used as fallback anchors if a template's
+// element was customized away entirely, so auto-injection still has
+// somewhere sane to sit.
 const DEFAULT_SIGNATURE_ANCHOR = { x: 166, y: 642, width: 280 };
+const DEFAULT_LOGO_ANCHOR = { x: 280, y: 29, width: 52, height: 52 };
 
 // If a principal's e-signature is configured but this template's elements
 // don't already place one, adds one automatically — anchored just above the
@@ -236,6 +239,28 @@ function withAutoSignature(elements, signatureDataUrl) {
   return [...list, signatureEl];
 }
 
+// Same idea as withAutoSignature, but for the school logo — anchored to
+// (and sized exactly to) the 'seal_circle' element, so the logo image is
+// painted last (on top) and visually replaces the "Official Seal" circle
+// and its label rather than sitting alongside them.
+function withAutoLogo(elements, logoDataUrl) {
+  const list = elements || [];
+  if (!logoDataUrl) return list;
+  if (list.some((el) => el.type === 'image' && el.source === 'logo')) return list;
+
+  const anchor = list.find((el) => el.id === 'seal_circle') || DEFAULT_LOGO_ANCHOR;
+  const logoEl = {
+    id: 'auto_logo',
+    type: 'image',
+    source: 'logo',
+    x: anchor.x,
+    y: anchor.y,
+    width: anchor.width,
+    height: anchor.height,
+  };
+  return [...list, logoEl];
+}
+
 // Proportionally scales and offsets a positioned-elements array — used to
 // shrink a full-page certificate design down to fit one half of a shared
 // sheet (see buildCertificateDocDefinitionMultiSheet). Mirrors the
@@ -260,14 +285,15 @@ function scaleElements(elements, scale, offsetX, offsetY) {
  * can reuse it twice per sheet without duplicating the element-rendering
  * logic.
  */
-async function buildCertificateContentNodes(elements, mergeData, qrToken, controlNo, signatureDataUrl, imageCache = new Map()) {
+async function buildCertificateContentNodes(elements, mergeData, qrToken, controlNo, signatureDataUrl, logoDataUrl, imageCache = new Map()) {
   const list = elements || [];
   // Only generate the QR image when something in the layout actually needs
   // it — most certificates no longer include one.
   const needsQr = list.some((el) => el.type === 'image' && el.source === 'qr');
-  const [qrDataUrl, resolvedSignature] = await Promise.all([
+  const [qrDataUrl, resolvedSignature, resolvedLogo] = await Promise.all([
     needsQr ? generateQrDataUrl(qrToken || controlNo) : Promise.resolve(null),
     resolveImageValue(signatureDataUrl, imageCache),
+    resolveImageValue(logoDataUrl, imageCache),
   ]);
 
   // Uploaded logos are stored as a Cloudinary URL (see uploads.routes.js) —
@@ -286,7 +312,7 @@ async function buildCertificateContentNodes(elements, mergeData, qrToken, contro
     .map((el) => {
       if (el.type === 'text') return renderTextElement(el, mergeData);
       if (el.type === 'shape') return renderShapeElement(el);
-      if (el.type === 'image') return renderImageElement(el, qrDataUrl, resolvedSignature);
+      if (el.type === 'image') return renderImageElement(el, qrDataUrl, resolvedSignature, resolvedLogo);
       return null;
     })
     .filter(Boolean);
@@ -298,8 +324,9 @@ async function buildCertificateContentNodes(elements, mergeData, qrToken, contro
  * layout is entirely data-driven (edited via the certificate template
  * designer) rather than hardcoded here.
  */
-async function buildCertificateDocDefinition({ elements, mergeData, qrToken, controlNo, orientation, paperSize, signatureDataUrl }) {
-  const content = await buildCertificateContentNodes(withAutoSignature(elements, signatureDataUrl), mergeData, qrToken, controlNo, signatureDataUrl, new Map());
+async function buildCertificateDocDefinition({ elements, mergeData, qrToken, controlNo, orientation, paperSize, signatureDataUrl, logoDataUrl }) {
+  const withExtras = withAutoLogo(withAutoSignature(elements, signatureDataUrl), logoDataUrl);
+  const content = await buildCertificateContentNodes(withExtras, mergeData, qrToken, controlNo, signatureDataUrl, logoDataUrl, new Map());
   const { width, height } = pageDims(paperSize, orientation);
 
   return {
@@ -319,7 +346,7 @@ async function buildCertificateDocDefinition({ elements, mergeData, qrToken, con
  * `{ elements, mergeData, qrToken, controlNo }`; consecutive pairs share a
  * sheet, and a trailing odd entry gets a sheet to itself (blank bottom half).
  */
-async function buildCertificateDocDefinitionMultiSheet(entries, { paperSize, orientation, signatureDataUrl }) {
+async function buildCertificateDocDefinitionMultiSheet(entries, { paperSize, orientation, signatureDataUrl, logoDataUrl }) {
   const { width, height } = pageDims(paperSize, orientation);
   const slotHeight = height / 2;
   const scale = 0.5;
@@ -335,12 +362,12 @@ async function buildCertificateDocDefinitionMultiSheet(entries, { paperSize, ori
     if (content.length > 0) sheetContent.push({ text: '', pageBreak: 'before' });
 
     if (a) {
-      const aElements = scaleElements(withAutoSignature(a.elements, signatureDataUrl), scale, offsetX, 0);
-      sheetContent.push(...await buildCertificateContentNodes(aElements, a.mergeData, a.qrToken, a.controlNo, signatureDataUrl, imageCache));
+      const aElements = scaleElements(withAutoLogo(withAutoSignature(a.elements, signatureDataUrl), logoDataUrl), scale, offsetX, 0);
+      sheetContent.push(...await buildCertificateContentNodes(aElements, a.mergeData, a.qrToken, a.controlNo, signatureDataUrl, logoDataUrl, imageCache));
     }
     if (b) {
-      const bElements = scaleElements(withAutoSignature(b.elements, signatureDataUrl), scale, offsetX, slotHeight);
-      sheetContent.push(...await buildCertificateContentNodes(bElements, b.mergeData, b.qrToken, b.controlNo, signatureDataUrl, imageCache));
+      const bElements = scaleElements(withAutoLogo(withAutoSignature(b.elements, signatureDataUrl), logoDataUrl), scale, offsetX, slotHeight);
+      sheetContent.push(...await buildCertificateContentNodes(bElements, b.mergeData, b.qrToken, b.controlNo, signatureDataUrl, logoDataUrl, imageCache));
     }
 
     sheetContent.push({
@@ -394,7 +421,7 @@ function buildCompletionMergeData({
  * 6+ journalism categories across the Friday press conference sessions.
  */
 async function renderCertificatePdf(opts, res) {
-  const { student, template, signatureDataUrl } = opts;
+  const { student, template, signatureDataUrl, logoDataUrl } = opts;
   const { mergeData, controlNo } = buildCompletionMergeData(opts);
   const tpl = template || DEFAULT_TEMPLATES.completion;
   const docDefinition = await buildCertificateDocDefinition({
@@ -402,6 +429,7 @@ async function renderCertificatePdf(opts, res) {
     orientation: tpl.orientation,
     paperSize: tpl.paper_size,
     signatureDataUrl,
+    logoDataUrl,
     mergeData,
     qrToken: student.qr_token,
     controlNo,
@@ -439,7 +467,7 @@ function buildRankingMergeData({
  * Certificate of Recognition — per-category ranking award (1st through 10th).
  */
 async function renderRankingCertificatePdf(opts, res) {
-  const { student, template, signatureDataUrl } = opts;
+  const { student, template, signatureDataUrl, logoDataUrl } = opts;
   const { mergeData, controlNo } = buildRankingMergeData(opts);
   const tpl = template || DEFAULT_TEMPLATES.ranking;
   const docDefinition = await buildCertificateDocDefinition({
@@ -447,6 +475,7 @@ async function renderRankingCertificatePdf(opts, res) {
     orientation: tpl.orientation,
     paperSize: tpl.paper_size,
     signatureDataUrl,
+    logoDataUrl,
     mergeData,
     qrToken: student.qr_token,
     controlNo,
@@ -484,7 +513,7 @@ function buildSpeakerMergeData({
  * position/organization instead via the composed {{position_line}} field).
  */
 async function renderSpeakerCertificatePdf(opts, res) {
-  const { template, signatureDataUrl } = opts;
+  const { template, signatureDataUrl, logoDataUrl } = opts;
   const { mergeData, controlNo } = buildSpeakerMergeData(opts);
   const tpl = template || DEFAULT_TEMPLATES.speaker;
   const docDefinition = await buildCertificateDocDefinition({
@@ -492,6 +521,7 @@ async function renderSpeakerCertificatePdf(opts, res) {
     orientation: tpl.orientation,
     paperSize: tpl.paper_size,
     signatureDataUrl,
+    logoDataUrl,
     mergeData,
     controlNo,
   });
@@ -530,7 +560,7 @@ function buildTeacherMergeData({
  * instead via the composed {{role_line}} field).
  */
 async function renderTeacherCertificatePdf(opts, res) {
-  const { template, signatureDataUrl } = opts;
+  const { template, signatureDataUrl, logoDataUrl } = opts;
   const { mergeData, controlNo } = buildTeacherMergeData(opts);
   const tpl = template || DEFAULT_TEMPLATES.teacher;
   const docDefinition = await buildCertificateDocDefinition({
@@ -538,6 +568,7 @@ async function renderTeacherCertificatePdf(opts, res) {
     orientation: tpl.orientation,
     paperSize: tpl.paper_size,
     signatureDataUrl,
+    logoDataUrl,
     mergeData,
     controlNo,
   });

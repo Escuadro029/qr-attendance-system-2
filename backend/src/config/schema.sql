@@ -109,7 +109,8 @@ CREATE TABLE IF NOT EXISTS certificate_settings (
   date_range      VARCHAR(200),
   venue           VARCHAR(200),
   custom_fields   JSONB NOT NULL DEFAULT '[]', -- [{name, value}, ...] -> {{slugified_name}}
-  signatory_signature TEXT, -- base64 data URI of the principal's e-signature image, auto-included on every certificate
+  signatory_signature TEXT, -- base64 data URI or Cloudinary URL of the principal's e-signature image, auto-included on every certificate
+  school_logo     TEXT, -- Cloudinary URL of the school logo, auto-included in place of the "Official Seal" circle
   updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 

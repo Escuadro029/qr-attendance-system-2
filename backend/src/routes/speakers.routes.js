@@ -102,6 +102,7 @@ router.get('/bulk.pdf', requireAuth, async (req, res) => {
       paperSize: template.paper_size,
       orientation: template.orientation,
       signatureDataUrl: settings.signatory_signature,
+      logoDataUrl: settings.school_logo,
     });
 
     res.set('Content-Type', 'application/pdf');
@@ -140,6 +141,7 @@ router.get('/:id/certificate.pdf', requireAuth, async (req, res) => {
       signatoryTitle: req.query.signatoryTitle || settings.signatory_title,
       customFields: settings.custom_fields,
       signatureDataUrl: settings.signatory_signature,
+      logoDataUrl: settings.school_logo,
       template,
     }, res);
   } catch (err) {
