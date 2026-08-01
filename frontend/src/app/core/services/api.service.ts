@@ -127,6 +127,11 @@ export class ApiService {
     return this.http.get(`${this.base}/rankings/bulk.pdf?ids=${encodeURIComponent(idsParam)}`, { responseType: 'blob' });
   }
 
+  // Plain rank 1-10 results list for one category (not per-student certificates).
+  getRankingsListBlob(categoryId: number): Observable<Blob> {
+    return this.http.get(`${this.base}/rankings/list.pdf?category_id=${categoryId}`, { responseType: 'blob' });
+  }
+
   // Certificate templates (admin-only visual designer)
   getCertificateTemplate(key: CertificateKey): Observable<CertificateTemplate> {
     return this.http.get<CertificateTemplate>(`${this.base}/certificate-templates/${key}`);

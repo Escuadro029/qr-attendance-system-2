@@ -51,18 +51,22 @@ function wrapWords(ctx: CanvasRenderingContext2D, text: string, maxWidth: number
 }
 
 // Packs chip labels into centered rows (like flex-wrap), returning the total
-// height consumed so the caller can advance its layout cursor.
+// height consumed so the caller can advance its layout cursor. `scale` lets
+// the caller shrink chip size/spacing uniformly when there isn't room.
 function drawChipRows(
   ctx: CanvasRenderingContext2D,
   items: string[],
   centerX: number,
   startY: number,
-  maxRowWidth: number
+  maxRowWidth: number,
+  scale = 1
 ): number {
-  const paddingX = 24;
-  const chipHeight = 56;
-  const gapX = 16;
-  const gapY = 16;
+  const paddingX = 24 * scale;
+  const chipHeight = 56 * scale;
+  const gapX = 16 * scale;
+  const gapY = 16 * scale;
+  const font = `600 ${Math.round(26 * scale)}px "Segoe UI", Arial, sans-serif`;
+  ctx.font = font;
 
   const rows: string[][] = [];
   let current: string[] = [];
@@ -98,7 +102,7 @@ function drawChipRows(
       ctx.fillStyle = GOLD_LIGHT;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.font = '600 26px "Segoe UI", Arial, sans-serif';
+      ctx.font = font;
       ctx.fillText(text, x + w / 2, y + chipHeight / 2 + 1);
       x += w + gapX;
     });
@@ -108,62 +112,70 @@ function drawChipRows(
 }
 
 // Draws the name/grade/badge/category-list block starting at `startY` and
-// returns the y position where it ends — called twice (see below) so the
-// block can be measured, then re-drawn centered in the taller "story" format
-// instead of leaving a large empty gap under a short category list.
-function drawContentBlock(ctx: CanvasRenderingContext2D, data: PosterData, width: number, startY: number): number {
+// returns the y position where it ends — called at least twice (see below)
+// so the block can be measured, then re-drawn at whatever `scale` keeps it
+// inside the canvas, centered in the taller "story" format instead of
+// leaving a large empty gap under a short category list.
+function drawContentBlock(
+  ctx: CanvasRenderingContext2D,
+  data: PosterData,
+  width: number,
+  startY: number,
+  scale = 1
+): number {
   const centerX = width / 2;
   let y = startY;
+  const s = (n: number) => Math.round(n * scale);
 
   ctx.textAlign = 'center';
   ctx.textBaseline = 'alphabetic';
 
   ctx.fillStyle = GOLD_LIGHT;
-  ctx.font = '600 30px "Segoe UI", Arial, sans-serif';
+  ctx.font = `600 ${s(30)}px "Segoe UI", Arial, sans-serif`;
   ctx.fillText('PRESS-FILES', centerX, y);
 
-  y += 84;
+  y += s(84);
   ctx.fillStyle = GOLD;
-  ctx.font = 'bold 68px Georgia, "Times New Roman", serif';
+  ctx.font = `bold ${s(68)}px Georgia, "Times New Roman", serif`;
   ctx.fillText('CONGRATULATIONS!', centerX, y);
 
-  y += 96;
+  y += s(96);
   ctx.fillStyle = WHITE;
-  ctx.font = 'bold italic 80px Georgia, "Times New Roman", serif';
+  ctx.font = `bold italic ${s(80)}px Georgia, "Times New Roman", serif`;
   const nameLines = wrapWords(ctx, data.fullName, width - 200);
   for (const line of nameLines) {
     ctx.fillText(line, centerX, y);
-    y += 90;
+    y += s(90);
   }
 
-  y += 8;
+  y += s(8);
   ctx.fillStyle = GOLD_LIGHT;
-  ctx.font = '400 34px "Segoe UI", Arial, sans-serif';
+  ctx.font = `400 ${s(34)}px "Segoe UI", Arial, sans-serif`;
   ctx.fillText(`Grade ${data.grade} - ${data.section}`, centerX, y);
 
-  y += 70;
+  y += s(70);
   const badgeText = `${data.categoriesCompleted.length} of ${data.threshold}+ Categories Completed`;
-  ctx.font = '700 30px "Segoe UI", Arial, sans-serif';
-  const badgeWidth = ctx.measureText(badgeText).width + 64;
-  roundRectPath(ctx, centerX - badgeWidth / 2, y - 42, badgeWidth, 60, 30);
+  ctx.font = `700 ${s(30)}px "Segoe UI", Arial, sans-serif`;
+  const badgeWidth = ctx.measureText(badgeText).width + s(64);
+  roundRectPath(ctx, centerX - badgeWidth / 2, y - s(42), badgeWidth, s(60), s(30));
   ctx.fillStyle = GOLD;
   ctx.fill();
   ctx.fillStyle = NAVY;
   ctx.fillText(badgeText, centerX, y);
 
-  y += 90;
+  y += s(90);
   ctx.fillStyle = GOLD_LIGHT;
-  ctx.font = '600 28px "Segoe UI", Arial, sans-serif';
+  ctx.font = `600 ${s(28)}px "Segoe UI", Arial, sans-serif`;
   ctx.fillText('CATEGORIES COMPLETED', centerX, y);
 
-  y += 40;
+  y += s(40);
   if (data.categoriesCompleted.length > 0) {
-    y += drawChipRows(ctx, data.categoriesCompleted, centerX, y, width - 200);
+    y += drawChipRows(ctx, data.categoriesCompleted, centerX, y, width - 200, scale);
   } else {
     ctx.fillStyle = 'rgba(255,255,255,0.6)';
-    ctx.font = '400 26px "Segoe UI", Arial, sans-serif';
-    ctx.fillText('Just getting started!', centerX, y + 20);
-    y += 40;
+    ctx.font = `400 ${s(26)}px "Segoe UI", Arial, sans-serif`;
+    ctx.fillText('Just getting started!', centerX, y + s(20));
+    y += s(40);
   }
 
   return y;
@@ -179,13 +191,16 @@ export function generatePosterDataUrl(data: PosterData, format: PosterFormat): s
 
   const footerY = height - 80;
   const topMargin = height * (format === 'square' ? 0.16 : 0.12);
-
-  // Measurement pass (drawn, but the whole canvas gets cleared and redrawn
-  // below) — finds how tall the content actually is so it can be centered
-  // in the available space instead of leaving a gap under it.
-  const measuredEndY = drawContentBlock(ctx, data, width, topMargin);
-  const contentHeight = measuredEndY - topMargin;
   const availableHeight = footerY - 60 - topMargin;
+
+  // Measurement pass at full scale (drawn, but the whole canvas gets cleared
+  // and redrawn below) — finds how tall the content actually is. A long name
+  // or a long completed-categories list can be taller than the available
+  // space, so if it overflows, shrink font sizes/spacing uniformly (down to
+  // 55%) rather than letting the content run into the footer or get clipped.
+  const measuredHeight = drawContentBlock(ctx, data, width, topMargin) - topMargin;
+  const scale = measuredHeight > availableHeight ? Math.max(0.55, availableHeight / measuredHeight) : 1;
+  const contentHeight = scale === 1 ? measuredHeight : drawContentBlock(ctx, data, width, topMargin, scale) - topMargin;
   const centerOffset = format === 'story' ? Math.max(0, (availableHeight - contentHeight) / 2) : 0;
 
   // Background + decorative frame, then the real (possibly re-centered) pass.
@@ -197,7 +212,7 @@ export function generatePosterDataUrl(data: PosterData, format: PosterFormat): s
   ctx.lineWidth = 2;
   ctx.strokeRect(58, 58, width - 116, height - 116);
 
-  drawContentBlock(ctx, data, width, topMargin + centerOffset);
+  drawContentBlock(ctx, data, width, topMargin + centerOffset, scale);
 
   ctx.fillStyle = GOLD_LIGHT;
   ctx.font = '400 24px "Segoe UI", Arial, sans-serif';

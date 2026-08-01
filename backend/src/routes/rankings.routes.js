@@ -5,6 +5,7 @@ const { renderRankingCertificatePdf, generateControlNo, buildRankingMergeData, b
 const { safeFilename } = require('../utils/safeFilename');
 const { getTemplate } = require('../utils/certificateTemplateStore');
 const { getSettings } = require('../utils/certificateSettingsStore');
+const { buildRankingsListDocDefinition } = require('../utils/rankingsListPdf');
 
 const router = express.Router();
 
@@ -163,6 +164,48 @@ router.get('/bulk.pdf', requireAuth, async (req, res) => {
   } catch (err) {
     console.error(err);
     if (!res.headersSent) res.status(500).json({ error: 'Failed to generate ranking certificate pack' });
+  }
+});
+
+// GET /api/rankings/list.pdf?category_id=123 -> plain rank 1-10 results list
+// for one category (not per-student certificates), auto-styled as a
+// "Journalism" or "Team" layout based on the category name.
+router.get('/list.pdf', requireAuth, async (req, res) => {
+  const categoryId = req.query.category_id;
+  if (!categoryId) return res.status(400).json({ error: 'category_id is required.' });
+
+  try {
+    const result = await pool.query(
+      `
+      SELECT r.rank, s.full_name, s.grade, s.section, c.name AS category_name
+      FROM category_rankings r
+      JOIN categories c ON c.id = r.category_id
+      JOIN students s ON s.id = r.student_id
+      WHERE r.category_id = $1 AND r.tenant_id = $2
+      ORDER BY r.rank
+    `,
+      [categoryId, req.user.tenant_id]
+    );
+
+    if (result.rowCount === 0) return res.status(400).json({ error: 'No rankings assigned for this category yet.' });
+
+    const settings = await getSettings(req.user.tenant_id);
+    const categoryName = result.rows[0].category_name;
+
+    const docDefinition = buildRankingsListDocDefinition({
+      categoryName,
+      rows: result.rows,
+      eventName: req.query.event || settings.event_name || 'School Press Conference',
+      dateRange: req.query.dates || settings.date_range,
+      venue: req.query.venue || settings.venue,
+    });
+
+    res.set('Content-Type', 'application/pdf');
+    res.set('Content-Disposition', `inline; filename="rankings-list-${safeFilename(categoryName)}.pdf"`);
+    await streamPdf(docDefinition, res);
+  } catch (err) {
+    console.error(err);
+    if (!res.headersSent) res.status(500).json({ error: 'Failed to generate rankings list' });
   }
 });
 

@@ -7,6 +7,7 @@ import { DocumentModalComponent } from '../../shared/components/document-modal/d
 import { EditStudentModalComponent } from '../../shared/components/edit-student-modal/edit-student-modal.component';
 import { PaginationComponent } from '../../shared/components/pagination/pagination.component';
 import { generatePosterDataUrl, PosterFormat } from '../../core/utils/poster';
+import { generatePosterZipBlob } from '../../core/utils/posterZip';
 
 const PAGE_SIZE = 10;
 
@@ -40,6 +41,33 @@ type ModalKind = 'image' | 'pdf' | null;
               Print All IDs
             </button>
           </div>
+        </div>
+
+        <div class="toolbar poster-bulk-row">
+          <span class="bulk-label">Posters:</span>
+          <select [ngModel]="posterBulkFormat()" (ngModelChange)="posterBulkFormat.set($event)" name="poster_bulk_format">
+            <option value="square">Square Post</option>
+            <option value="story">Story</option>
+          </select>
+          <button class="btn btn-outline btn-sm" (click)="downloadSelectedPosters()" [disabled]="selectedIds().size === 0 || bulkPosterPrinting()">
+            {{ bulkPosterPrinting() ? 'Preparing…' : 'Print Selected Posters' }}
+          </button>
+          <button class="btn btn-gold btn-sm" (click)="downloadAllPosters()" [disabled]="bulkPosterPrinting()">
+            {{ bulkPosterPrinting() ? 'Preparing…' : 'Print All Posters' }}
+          </button>
+        </div>
+
+        <div class="toolbar cert-bulk-row">
+          <span class="bulk-label">Certificates:</span>
+          <button class="btn btn-outline btn-sm" (click)="printSelectedCertificates()" [disabled]="selectedIds().size === 0 || bulkCertPrinting()">
+            {{ bulkCertPrinting() ? 'Preparing…' : 'Print Selected (2 per sheet)' }}
+          </button>
+          <button class="btn btn-gold btn-sm" (click)="printAllCertificates()" [disabled]="qualifiedCount() === 0 || bulkCertPrinting()">
+            {{ bulkCertPrinting() ? 'Preparing…' : 'Print All (2 per sheet)' }}
+          </button>
+          @if (qualifiedCount() === 0) {
+            <span class="bulk-hint">No students have qualified yet ({{ QUALIFYING_THRESHOLD }}+ categories).</span>
+          }
         </div>
 
         @if (loading()) {
@@ -153,6 +181,10 @@ type ModalKind = 'image' | 'pdf' | null;
     .toolbar input[type="text"], .toolbar input:not([type]) { max-width: 280px; }
     .bulk-actions { display: flex; align-items: center; gap: 10px; }
     .selected-count { font-size: 0.8rem; color: #777; }
+    .poster-bulk-row { margin: -8px 0 8px; justify-content: flex-start; }
+    .cert-bulk-row { margin: -8px 0 16px; justify-content: flex-start; }
+    .bulk-label { font-size: 0.8rem; color: #777; }
+    .bulk-hint { font-size: 0.78rem; color: #999; }
     .actions { display: flex; gap: 6px; flex-wrap: wrap; }
     .btn-sm { padding: 6px 10px; font-size: 0.78rem; }
     .category-chips { display: flex; flex-wrap: wrap; gap: 4px; max-width: 240px; }
@@ -190,6 +222,9 @@ export class ProgressComponent implements OnInit {
   page = signal(1);
   selectedIds = signal<Set<string>>(new Set());
   bulkPrinting = signal(false);
+  bulkPosterPrinting = signal(false);
+  posterBulkFormat = signal<PosterFormat>('square');
+  bulkCertPrinting = signal(false);
 
   // View modal state
   modalOpen = signal(false);
@@ -253,6 +288,10 @@ export class ProgressComponent implements OnInit {
     return Math.max(1, Math.ceil(this.filtered().length / PAGE_SIZE));
   }
 
+  qualifiedCount(): number {
+    return this.rows().filter((r) => r.categories_completed >= this.QUALIFYING_THRESHOLD).length;
+  }
+
   paged(): ProgressRow[] {
     const start = (this.page() - 1) * PAGE_SIZE;
     return this.filtered().slice(start, start + PAGE_SIZE);
@@ -303,6 +342,75 @@ export class ProgressComponent implements OnInit {
       },
       error: () => alert('Could not generate the bulk ID sheet. Please try again.'),
       complete: () => this.bulkPrinting.set(false),
+    });
+  }
+
+  downloadSelectedPosters() {
+    const ids = this.selectedIds();
+    const rows = this.rows().filter((r) => ids.has(r.student_id));
+    if (rows.length === 0) return;
+    this.downloadPosterZip(rows);
+  }
+
+  downloadAllPosters() {
+    this.downloadPosterZip(this.rows());
+  }
+
+  private downloadPosterZip(rows: ProgressRow[]) {
+    if (rows.length === 0) return;
+    const format = this.posterBulkFormat();
+    this.bulkPosterPrinting.set(true);
+    generatePosterZipBlob(
+      rows.map((r) => ({
+        fileNameBase: `poster-${r.full_name.replace(/\s+/g, '_')}`,
+        data: {
+          fullName: r.full_name,
+          grade: r.grade,
+          section: r.section,
+          categoriesCompleted: r.completed_categories,
+          threshold: this.QUALIFYING_THRESHOLD,
+        },
+      })),
+      format
+    )
+      .then((blob) => {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `posters-${format}.zip`;
+        a.click();
+        URL.revokeObjectURL(url);
+      })
+      .catch(() => alert('Could not generate the poster pack. Please try again.'))
+      .finally(() => this.bulkPosterPrinting.set(false));
+  }
+
+  printSelectedCertificates() {
+    const ids = Array.from(this.selectedIds());
+    if (ids.length === 0) return;
+    this.downloadBulkCertificates(ids);
+  }
+
+  printAllCertificates() {
+    this.downloadBulkCertificates('all');
+  }
+
+  // Server-side re-filters to only qualified students (categories_completed
+  // >= QUALIFYING_THRESHOLD) regardless of which ids are passed, so raw
+  // selectedIds() — qualified or not — is safe to send as-is.
+  private downloadBulkCertificates(ids: string[] | 'all') {
+    this.bulkCertPrinting.set(true);
+    this.api.getCertificatesBulkBlob(ids).subscribe({
+      next: (blob) => {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'certificates-2up.pdf';
+        a.click();
+        URL.revokeObjectURL(url);
+      },
+      error: (err) => alert(err?.error?.error || 'Could not generate the certificate pack. Please try again.'),
+      complete: () => this.bulkCertPrinting.set(false),
     });
   }
 

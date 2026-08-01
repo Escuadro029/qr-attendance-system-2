@@ -13,6 +13,13 @@ const RANK_LABELS: Record<number, string> = {
 const RANKS: RankPlace[] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 const PAGE_SIZE = 10;
 
+// Categories like "Radio Broadcasting" are produced by a crew rather than a
+// single writer/photographer, so they're grouped/printed as a "Team"
+// category instead of "Journalism". Mirrors backend/src/utils/rankingsListPdf.js.
+function isTeamCategory(name: string): boolean {
+  return /\b(team|broadcast|radio)\b/i.test(name || '');
+}
+
 @Component({
   selector: 'app-rankings',
   standalone: true,
@@ -77,10 +84,51 @@ const PAGE_SIZE = 10;
       <div class="card">
         <div class="card-head-row">
           <h3 class="headline" style="font-size:1rem; margin-bottom:14px;">Current Rankings</h3>
-          <button class="btn btn-gold btn-sm" (click)="printAllTwoUp()" [disabled]="rankings().length === 0 || bulkPrinting()">
-            {{ bulkPrinting() ? 'Preparing…' : 'Print All (2 per sheet)' }}
-          </button>
+          <div class="print-actions">
+            <button
+              class="btn btn-primary btn-sm"
+              (click)="printCategoryList()"
+              [disabled]="selectedCategoryId() === 'all' || listPrinting()"
+              title="Print a plain 1st–10th place results list for the selected category"
+            >
+              {{ listPrinting() ? 'Preparing…' : 'Print Rankings List' }}
+            </button>
+            <button class="btn btn-gold btn-sm" (click)="printAllTwoUp()" [disabled]="filteredRankings().length === 0 || bulkPrinting()">
+              {{ bulkPrinting() ? 'Preparing…' : (isFiltering() ? 'Print Filtered (2 per sheet)' : 'Print All (2 per sheet)') }}
+            </button>
+          </div>
         </div>
+
+        <div class="filter-row">
+          <div>
+            <label>Filter by Category</label>
+            <select [ngModel]="selectedCategoryId()" (ngModelChange)="onCategoryFilterChange($event)" name="category_filter">
+              <option [ngValue]="'all'">All Categories</option>
+              <optgroup label="Journalism">
+                @for (cat of journalismCategories(); track cat.id) {
+                  <option [ngValue]="cat.id">{{ cat.name }}</option>
+                }
+              </optgroup>
+              <optgroup label="Team">
+                @for (cat of teamCategories(); track cat.id) {
+                  <option [ngValue]="cat.id">{{ cat.name }}</option>
+                }
+              </optgroup>
+            </select>
+          </div>
+          <div>
+            <label>Search Student</label>
+            <input
+              type="text"
+              placeholder="Search by student name…"
+              [ngModel]="search()"
+              (ngModelChange)="onSearchChange($event)"
+              name="ranking_search"
+              autocomplete="off"
+            />
+          </div>
+        </div>
+
         @if (loading()) {
           <p class="placeholder">Loading…</p>
         } @else {
@@ -108,7 +156,9 @@ const PAGE_SIZE = 10;
                 </tr>
               }
               @empty {
-                <tr><td colspan="5" class="placeholder">No rankings assigned yet.</td></tr>
+                <tr><td colspan="5" class="placeholder">
+                  {{ rankings().length === 0 ? 'No rankings assigned yet.' : 'No rankings match your filter.' }}
+                </td></tr>
               }
             </tbody>
           </table>
@@ -132,6 +182,8 @@ const PAGE_SIZE = 10;
     .lede { color: #666; margin: 6px 0 24px; }
     .assign-card { margin-bottom: 20px; }
     .card-head-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+    .print-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+    .filter-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px; }
     .assign-row { display: grid; grid-template-columns: 1fr 1.4fr 0.8fr auto; gap: 12px; align-items: end; }
     .student-picker { position: relative; }
     .student-dropdown {
@@ -149,7 +201,7 @@ const PAGE_SIZE = 10;
     .placeholder { color: #999; font-size: 0.85rem; text-align: center; padding: 20px 0; }
     .actions { display: flex; gap: 6px; flex-wrap: wrap; }
     .btn-sm { padding: 6px 10px; font-size: 0.78rem; }
-    @media (max-width: 800px) { .assign-row { grid-template-columns: 1fr; } }
+    @media (max-width: 800px) { .assign-row { grid-template-columns: 1fr; } .filter-row { grid-template-columns: 1fr; } }
   `],
 })
 export class RankingsComponent implements OnInit {
@@ -161,8 +213,12 @@ export class RankingsComponent implements OnInit {
   loading = signal(true);
   saving = signal(false);
   bulkPrinting = signal(false);
+  listPrinting = signal(false);
   error = signal('');
   page = signal(1);
+
+  selectedCategoryId = signal<number | 'all'>('all');
+  search = signal('');
 
   form: { category_id: number | null; student_id: string | null; rank: RankPlace } = {
     category_id: null,
@@ -201,16 +257,50 @@ export class RankingsComponent implements OnInit {
   }
 
   totalPages(): number {
-    return Math.max(1, Math.ceil(this.rankings().length / PAGE_SIZE));
+    return Math.max(1, Math.ceil(this.filteredRankings().length / PAGE_SIZE));
   }
 
   paged(): Ranking[] {
     const start = (this.page() - 1) * PAGE_SIZE;
-    return this.rankings().slice(start, start + PAGE_SIZE);
+    return this.filteredRankings().slice(start, start + PAGE_SIZE);
   }
 
   rankLabel(rank: number): string {
     return RANK_LABELS[rank] || `Rank ${rank}`;
+  }
+
+  journalismCategories(): Category[] {
+    return this.categories().filter((c) => !isTeamCategory(c.name));
+  }
+
+  teamCategories(): Category[] {
+    return this.categories().filter((c) => isTeamCategory(c.name));
+  }
+
+  isFiltering(): boolean {
+    return this.selectedCategoryId() !== 'all' || !!this.search().trim();
+  }
+
+  // Plain method (not a computed signal) so it re-evaluates on every change
+  // detection pass, matching the studentQuery/filteredStudents pattern above.
+  filteredRankings(): Ranking[] {
+    const categoryId = this.selectedCategoryId();
+    const term = this.search().trim().toLowerCase();
+    return this.rankings().filter((r) => {
+      const matchesCategory = categoryId === 'all' || r.category_id === categoryId;
+      const matchesSearch = !term || r.student_name.toLowerCase().includes(term);
+      return matchesCategory && matchesSearch;
+    });
+  }
+
+  onCategoryFilterChange(value: number | 'all') {
+    this.selectedCategoryId.set(value);
+    this.page.set(1);
+  }
+
+  onSearchChange(value: string) {
+    this.search.set(value);
+    this.page.set(1);
   }
 
   // Plain method (not a computed signal) so it re-evaluates on every change
@@ -267,7 +357,8 @@ export class RankingsComponent implements OnInit {
 
   printAllTwoUp() {
     this.bulkPrinting.set(true);
-    this.api.getRankingsBulkBlob('all').subscribe({
+    const ids: string[] | 'all' = this.isFiltering() ? this.filteredRankings().map((r) => r.id) : 'all';
+    this.api.getRankingsBulkBlob(ids).subscribe({
       next: (blob) => {
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -277,6 +368,24 @@ export class RankingsComponent implements OnInit {
         URL.revokeObjectURL(url);
       },
       complete: () => this.bulkPrinting.set(false),
+    });
+  }
+
+  printCategoryList() {
+    const categoryId = this.selectedCategoryId();
+    if (categoryId === 'all') return;
+    this.listPrinting.set(true);
+    this.api.getRankingsListBlob(categoryId).subscribe({
+      next: (blob) => {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'rankings-list.pdf';
+        a.click();
+        URL.revokeObjectURL(url);
+      },
+      error: () => this.error.set('Could not generate the rankings list for this category.'),
+      complete: () => this.listPrinting.set(false),
     });
   }
 
