@@ -2,27 +2,25 @@
 // Matched by exact category name (categories have no "type" column — same
 // name-based approach as rankingsListPdf.js's isTeamCategory()).
 //
-// Each award is either:
-//   - "solo"  (group: false) — exactly one student holds this award; tagging
-//     a new student replaces whoever held it before, same as the existing
-//     numeric ranking's upsert behavior.
-//   - "group" (group: true)  — any number of students can hold this award
-//     together (e.g. a whole broadcast crew as "Champion"); tagging adds a
-//     student rather than replacing anyone.
+// `group: true` means any number of students can hold that award together
+// (tagging adds a student rather than replacing anyone). Every award here is
+// currently a group award — a `group: false` "solo" mode still exists in the
+// code (see categoryAwards.routes.js) for a single student who replaces
+// whoever held the award before, in case a future award needs it.
 const AWARD_SCHEMES = {
   'Radio Broadcasting': [
-    { label: 'Best News Anchor', group: false },
-    { label: 'Better News Anchor', group: false },
-    { label: 'Good News Anchor', group: false },
-    { label: 'Best Technical Application', group: false },
-    { label: 'Better Technical Application', group: false },
-    { label: 'Good Technical Application', group: false },
-    { label: 'Best Reporter', group: false },
-    { label: 'Better Reporter', group: false },
-    { label: 'Good Reporter', group: false },
-    { label: 'Best Infomercial', group: false },
-    { label: 'Better Infomercial', group: false },
-    { label: 'Good Infomercial', group: false },
+    { label: 'Best News Anchor', group: true },
+    { label: 'Better News Anchor', group: true },
+    { label: 'Good News Anchor', group: true },
+    { label: 'Best Technical Application', group: true },
+    { label: 'Better Technical Application', group: true },
+    { label: 'Good Technical Application', group: true },
+    { label: 'Best Reporter', group: true },
+    { label: 'Better Reporter', group: true },
+    { label: 'Good Reporter', group: true },
+    { label: 'Best Infomercial', group: true },
+    { label: 'Better Infomercial', group: true },
+    { label: 'Good Infomercial', group: true },
     { label: 'Champion', group: true },
     { label: '1st Runner-up', group: true },
     { label: '2nd Runner-up', group: true },
