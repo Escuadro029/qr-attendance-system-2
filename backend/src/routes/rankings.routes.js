@@ -167,9 +167,9 @@ router.get('/bulk.pdf', requireAuth, async (req, res) => {
   }
 });
 
-// GET /api/rankings/list.pdf?category_id=123 -> plain rank 1-10 results list
-// for one category (not per-student certificates), auto-styled as a
-// "Journalism" or "Team" layout based on the category name.
+// GET /api/rankings/list.pdf?category_id=123 -> square, social-media-ready
+// "Top N" results graphic for one category (not per-student certificates),
+// auto-styled as a "Journalism" or "Team" layout based on the category name.
 router.get('/list.pdf', requireAuth, async (req, res) => {
   const categoryId = req.query.category_id;
   if (!categoryId) return res.status(400).json({ error: 'category_id is required.' });
@@ -177,7 +177,7 @@ router.get('/list.pdf', requireAuth, async (req, res) => {
   try {
     const result = await pool.query(
       `
-      SELECT r.rank, s.full_name, s.grade, s.section, c.name AS category_name
+      SELECT r.rank, s.full_name, c.name AS category_name
       FROM category_rankings r
       JOIN categories c ON c.id = r.category_id
       JOIN students s ON s.id = r.student_id
