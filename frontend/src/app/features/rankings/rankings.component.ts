@@ -2,7 +2,7 @@ import { Component, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 import { ApiService } from '../../core/services/api.service';
-import { Category, Ranking, RankPlace, Student } from '../../core/models/models';
+import { AwardSchemeEntry, AwardSchemes, Category, CategoryAward, Ranking, RankPlace, Student } from '../../core/models/models';
 import { DocumentModalComponent } from '../../shared/components/document-modal/document-modal.component';
 import { PaginationComponent } from '../../shared/components/pagination/pagination.component';
 
@@ -36,7 +36,7 @@ function isTeamCategory(name: string): boolean {
             <label>Category</label>
             <select [(ngModel)]="form.category_id" name="category_id">
               <option [ngValue]="null" disabled>Select category…</option>
-              @for (cat of categories(); track cat.id) {
+              @for (cat of numericRankCategories(); track cat.id) {
                 <option [ngValue]="cat.id">{{ cat.name }}</option>
               }
             </select>
@@ -165,6 +165,140 @@ function isTeamCategory(name: string): boolean {
           <app-pagination [page]="page()" [totalPages]="totalPages()" (pageChange)="page.set($event)"></app-pagination>
         }
       </div>
+
+      <h1 class="headline" style="margin-top:36px;">Category Awards</h1>
+      <p class="lede">Radio Broadcasting and Scriptwriting use named awards instead of numeric rank — some (like Champion) can be shared by multiple students.</p>
+
+      <div class="card assign-card">
+        <h3 class="headline" style="font-size:1rem; margin-bottom:14px;">Assign a Category Award</h3>
+        <div class="assign-row">
+          <div>
+            <label>Category</label>
+            <select [(ngModel)]="awardForm.category_id" (ngModelChange)="onAwardCategoryChange()" name="award_category_id">
+              <option [ngValue]="null" disabled>Select category…</option>
+              @for (cat of awardCategories(); track cat.id) {
+                <option [ngValue]="cat.id">{{ cat.name }}</option>
+              }
+            </select>
+          </div>
+          <div class="student-picker">
+            <label>Student</label>
+            <input
+              type="text"
+              placeholder="Search by name or student ID…"
+              [ngModel]="awardStudentQuery()"
+              (ngModelChange)="onAwardStudentQueryChange($event)"
+              name="award_student_search"
+              autocomplete="off"
+              (focus)="awardStudentDropdownOpen.set(true)"
+              (blur)="onAwardStudentInputBlur()"
+            />
+            @if (awardStudentDropdownOpen()) {
+              <div class="student-dropdown">
+                @for (s of filteredAwardStudents(); track s.id) {
+                  <div class="student-option" (mousedown)="$event.preventDefault(); selectAwardStudent(s)">
+                    {{ s.full_name }} — Grade {{ s.grade }} - {{ s.section }}{{ s.student_id_no ? ' (' + s.student_id_no + ')' : '' }}
+                  </div>
+                } @empty {
+                  <div class="student-option placeholder">No matching students.</div>
+                }
+              </div>
+            }
+          </div>
+          <div>
+            <label>Award</label>
+            <select [(ngModel)]="awardForm.award_label" name="award_label" [disabled]="currentAwardOptions().length === 0">
+              <option [ngValue]="null" disabled>Select award…</option>
+              @for (a of currentAwardOptions(); track a.label) {
+                <option [ngValue]="a.label">{{ a.label }}{{ a.group ? ' (multiple students)' : '' }}</option>
+              }
+            </select>
+          </div>
+          <button class="btn btn-primary" (click)="assignAward()" [disabled]="!awardForm.category_id || !awardForm.student_id || !awardForm.award_label || awardSaving()">
+            {{ awardSaving() ? 'Saving…' : 'Assign' }}
+          </button>
+        </div>
+        @if (awardError()) { <p class="error">{{ awardError() }}</p> }
+        <p class="hint">Awards marked "multiple students" can be tagged to more than one student; other awards replace whoever currently holds them.</p>
+      </div>
+
+      <div class="card">
+        <div class="card-head-row">
+          <h3 class="headline" style="font-size:1rem; margin-bottom:14px;">Current Awards</h3>
+          <div class="print-actions">
+            <button
+              class="btn btn-primary btn-sm"
+              (click)="printAwardsList()"
+              [disabled]="awardSelectedCategoryId() === 'all' || awardListPrinting()"
+              title="Print a grouped awards results graphic for the selected category"
+            >
+              {{ awardListPrinting() ? 'Preparing…' : 'Print Awards List' }}
+            </button>
+            <button class="btn btn-gold btn-sm" (click)="printAwardsAllTwoUp()" [disabled]="filteredCategoryAwards().length === 0 || awardBulkPrinting()">
+              {{ awardBulkPrinting() ? 'Preparing…' : (isAwardFiltering() ? 'Print Filtered (2 per sheet)' : 'Print All (2 per sheet)') }}
+            </button>
+          </div>
+        </div>
+
+        <div class="filter-row">
+          <div>
+            <label>Filter by Category</label>
+            <select [ngModel]="awardSelectedCategoryId()" (ngModelChange)="onAwardCategoryFilterChange($event)" name="award_category_filter">
+              <option [ngValue]="'all'">All Categories</option>
+              @for (cat of awardCategories(); track cat.id) {
+                <option [ngValue]="cat.id">{{ cat.name }}</option>
+              }
+            </select>
+          </div>
+          <div>
+            <label>Search Student</label>
+            <input
+              type="text"
+              placeholder="Search by student name…"
+              [ngModel]="awardSearch()"
+              (ngModelChange)="onAwardSearchChange($event)"
+              name="award_search"
+              autocomplete="off"
+            />
+          </div>
+        </div>
+
+        @if (awardsLoading()) {
+          <p class="placeholder">Loading…</p>
+        } @else {
+          <table>
+            <thead>
+              <tr>
+                <th>Category</th>
+                <th>Award</th>
+                <th>Student</th>
+                <th>Grade &amp; Section</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (a of awardPaged(); track a.id) {
+                <tr>
+                  <td data-label="Category">{{ a.category_name }}</td>
+                  <td data-label="Award"><span class="badge badge-qualified">{{ a.award_label }}</span></td>
+                  <td data-label="Student">{{ a.student_name }}</td>
+                  <td data-label="Grade &amp; Section">Grade {{ a.grade }} - {{ a.section }}</td>
+                  <td class="actions" data-label="Actions">
+                    <button class="btn btn-gold btn-sm" (click)="viewAwardCertificate(a)">Certificate</button>
+                    <button class="btn btn-danger btn-sm" (click)="removeAward(a)">Remove</button>
+                  </td>
+                </tr>
+              }
+              @empty {
+                <tr><td colspan="5" class="placeholder">
+                  {{ categoryAwards().length === 0 ? 'No awards assigned yet.' : 'No awards match your filter.' }}
+                </td></tr>
+              }
+            </tbody>
+          </table>
+          <app-pagination [page]="awardPage()" [totalPages]="awardTotalPages()" (pageChange)="awardPage.set($event)"></app-pagination>
+        }
+      </div>
     </div>
 
     <app-document-modal
@@ -226,6 +360,30 @@ export class RankingsComponent implements OnInit {
     rank: 1,
   };
 
+  // Category awards (Radio Broadcasting / Scriptwriting) — named awards
+  // instead of numeric rank, kept as a fully separate flow/table since the
+  // data shape (award_label, possibly several students per award) doesn't
+  // fit the numeric ranking model.
+  awardSchemes = signal<AwardSchemes>({});
+  categoryAwards = signal<CategoryAward[]>([]);
+  awardsLoading = signal(true);
+  awardSaving = signal(false);
+  awardBulkPrinting = signal(false);
+  awardListPrinting = signal(false);
+  awardError = signal('');
+  awardPage = signal(1);
+  awardSelectedCategoryId = signal<number | 'all'>('all');
+  awardSearch = signal('');
+
+  awardForm: { category_id: number | null; student_id: string | null; award_label: string | null } = {
+    category_id: null,
+    student_id: null,
+    award_label: null,
+  };
+
+  awardStudentQuery = signal('');
+  awardStudentDropdownOpen = signal(false);
+
   studentQuery = signal('');
   studentDropdownOpen = signal(false);
 
@@ -236,13 +394,16 @@ export class RankingsComponent implements OnInit {
   modalError = signal('');
   private currentBlob: Blob | null = null;
   private currentRawUrl: string | null = null;
+  private currentFilename = '';
 
   constructor(private api: ApiService, private sanitizer: DomSanitizer) {}
 
   ngOnInit() {
     this.api.getCategories().subscribe((c) => this.categories.set(c));
     this.api.getStudents().subscribe((s) => this.students.set(s));
+    this.api.getAwardSchemes().subscribe((s) => this.awardSchemes.set(s));
     this.load();
+    this.loadAwards();
   }
 
   load() {
@@ -269,12 +430,21 @@ export class RankingsComponent implements OnInit {
     return RANK_LABELS[rank] || `Rank ${rank}`;
   }
 
+  // Categories with an award scheme (Radio Broadcasting, Scriptwriting) use
+  // named awards instead, so they're excluded from every numeric-rank list.
+  numericRankCategories(): Category[] {
+    const schemes = this.awardSchemes();
+    return this.categories().filter((c) => !schemes[c.name]);
+  }
+
   journalismCategories(): Category[] {
-    return this.categories().filter((c) => !isTeamCategory(c.name));
+    const schemes = this.awardSchemes();
+    return this.categories().filter((c) => !isTeamCategory(c.name) && !schemes[c.name]);
   }
 
   teamCategories(): Category[] {
-    return this.categories().filter((c) => isTeamCategory(c.name));
+    const schemes = this.awardSchemes();
+    return this.categories().filter((c) => isTeamCategory(c.name) && !schemes[c.name]);
   }
 
   isFiltering(): boolean {
@@ -394,6 +564,7 @@ export class RankingsComponent implements OnInit {
     this.modalTitle.set(`${r.student_name} — ${this.rankLabel(r.rank)}, ${r.category_name}`);
     this.modalLoading.set(true);
     this.modalError.set('');
+    this.currentFilename = `ranking-certificate-${r.student_name.replace(/\s+/g, '_')}.pdf`;
     this.api.getRankingCertificateBlob(r.id).subscribe({
       next: (blob) => {
         this.currentBlob = blob;
@@ -420,8 +591,169 @@ export class RankingsComponent implements OnInit {
     const url = URL.createObjectURL(this.currentBlob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'ranking-certificate.pdf';
+    a.download = this.currentFilename || 'ranking-certificate.pdf';
     a.click();
     URL.revokeObjectURL(url);
+  }
+
+  // ---- Category awards (Radio Broadcasting / Scriptwriting) ----
+
+  loadAwards() {
+    this.awardsLoading.set(true);
+    this.api.getCategoryAwards().subscribe({
+      next: (a) => this.categoryAwards.set(a),
+      complete: () => {
+        this.awardsLoading.set(false);
+        if (this.awardPage() > this.awardTotalPages()) this.awardPage.set(this.awardTotalPages());
+      },
+    });
+  }
+
+  awardCategories(): Category[] {
+    const schemes = this.awardSchemes();
+    return this.categories().filter((c) => !!schemes[c.name]);
+  }
+
+  currentAwardOptions(): AwardSchemeEntry[] {
+    const cat = this.categories().find((c) => c.id === this.awardForm.category_id);
+    if (!cat) return [];
+    return this.awardSchemes()[cat.name] || [];
+  }
+
+  onAwardCategoryChange() {
+    this.awardForm.award_label = null;
+  }
+
+  awardTotalPages(): number {
+    return Math.max(1, Math.ceil(this.filteredCategoryAwards().length / PAGE_SIZE));
+  }
+
+  awardPaged(): CategoryAward[] {
+    const start = (this.awardPage() - 1) * PAGE_SIZE;
+    return this.filteredCategoryAwards().slice(start, start + PAGE_SIZE);
+  }
+
+  isAwardFiltering(): boolean {
+    return this.awardSelectedCategoryId() !== 'all' || !!this.awardSearch().trim();
+  }
+
+  filteredCategoryAwards(): CategoryAward[] {
+    const categoryId = this.awardSelectedCategoryId();
+    const term = this.awardSearch().trim().toLowerCase();
+    return this.categoryAwards().filter((a) => {
+      const matchesCategory = categoryId === 'all' || a.category_id === categoryId;
+      const matchesSearch = !term || a.student_name.toLowerCase().includes(term);
+      return matchesCategory && matchesSearch;
+    });
+  }
+
+  onAwardCategoryFilterChange(value: number | 'all') {
+    this.awardSelectedCategoryId.set(value);
+    this.awardPage.set(1);
+  }
+
+  onAwardSearchChange(value: string) {
+    this.awardSearch.set(value);
+    this.awardPage.set(1);
+  }
+
+  filteredAwardStudents(): Student[] {
+    const term = this.awardStudentQuery().trim().toLowerCase();
+    if (!term) return this.students();
+    return this.students().filter(
+      (s) => s.full_name.toLowerCase().includes(term) || (s.student_id_no ?? '').toLowerCase().includes(term)
+    );
+  }
+
+  onAwardStudentQueryChange(value: string) {
+    this.awardStudentQuery.set(value);
+    this.awardStudentDropdownOpen.set(true);
+    this.awardForm.student_id = null;
+  }
+
+  selectAwardStudent(s: Student) {
+    this.awardForm.student_id = s.id;
+    this.awardStudentQuery.set(s.full_name);
+    this.awardStudentDropdownOpen.set(false);
+  }
+
+  onAwardStudentInputBlur() {
+    setTimeout(() => this.awardStudentDropdownOpen.set(false), 150);
+  }
+
+  assignAward() {
+    if (!this.awardForm.category_id || !this.awardForm.student_id || !this.awardForm.award_label) return;
+    this.awardSaving.set(true);
+    this.awardError.set('');
+    this.api.setCategoryAward({
+      category_id: this.awardForm.category_id,
+      student_id: this.awardForm.student_id,
+      award_label: this.awardForm.award_label,
+    }).subscribe({
+      next: () => {
+        this.awardForm.student_id = null;
+        this.awardStudentQuery.set('');
+        this.loadAwards();
+      },
+      error: (err) => this.awardError.set(err?.error?.error || 'Failed to save award.'),
+      complete: () => this.awardSaving.set(false),
+    });
+  }
+
+  removeAward(a: CategoryAward) {
+    if (!confirm(`Remove ${a.award_label} for ${a.student_name}?`)) return;
+    this.api.deleteCategoryAward(a.id).subscribe(() => this.loadAwards());
+  }
+
+  printAwardsAllTwoUp() {
+    this.awardBulkPrinting.set(true);
+    const ids: string[] | 'all' = this.isAwardFiltering() ? this.filteredCategoryAwards().map((a) => a.id) : 'all';
+    this.api.getCategoryAwardsBulkBlob(ids).subscribe({
+      next: (blob) => {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'award-certificates-2up.pdf';
+        a.click();
+        URL.revokeObjectURL(url);
+      },
+      complete: () => this.awardBulkPrinting.set(false),
+    });
+  }
+
+  printAwardsList() {
+    const categoryId = this.awardSelectedCategoryId();
+    if (categoryId === 'all') return;
+    this.awardListPrinting.set(true);
+    this.api.getCategoryAwardsListBlob(categoryId).subscribe({
+      next: (blob) => {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'awards-list.pdf';
+        a.click();
+        URL.revokeObjectURL(url);
+      },
+      error: () => this.awardError.set('Could not generate the awards list for this category.'),
+      complete: () => this.awardListPrinting.set(false),
+    });
+  }
+
+  viewAwardCertificate(a: CategoryAward) {
+    this.modalOpen.set(true);
+    this.modalTitle.set(`${a.student_name} — ${a.award_label}, ${a.category_name}`);
+    this.modalLoading.set(true);
+    this.modalError.set('');
+    this.currentFilename = `award-certificate-${a.student_name.replace(/\s+/g, '_')}.pdf`;
+    this.api.getCategoryAwardCertificateBlob(a.id).subscribe({
+      next: (blob) => {
+        this.currentBlob = blob;
+        const url = URL.createObjectURL(blob);
+        this.currentRawUrl = url;
+        this.modalUrl.set(this.sanitizer.bypassSecurityTrustResourceUrl(url));
+      },
+      error: () => this.modalError.set('Could not load certificate.'),
+      complete: () => this.modalLoading.set(false),
+    });
   }
 }

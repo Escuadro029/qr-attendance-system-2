@@ -2,7 +2,7 @@ import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
-import { Student, Category, ProgressRow, ScanResult, AttendanceRecord, AppUser, Ranking, RankPlace, CertificateTemplate, CertificateSettings, CertificateKey, Speaker, Teacher } from '../models/models';
+import { Student, Category, ProgressRow, ScanResult, AttendanceRecord, AppUser, Ranking, RankPlace, CertificateTemplate, CertificateSettings, CertificateKey, Speaker, Teacher, AwardSchemes, CategoryAward } from '../models/models';
 
 @Injectable({ providedIn: 'root' })
 export class ApiService {
@@ -79,9 +79,10 @@ export class ApiService {
     return this.http.get<AttendanceRecord[]>(`${this.base}/attendance/student/${studentId}`);
   }
 
-  // Certificates
-  getQualified(): Observable<{ threshold: number; qualified: ProgressRow[] }> {
-    return this.http.get<{ threshold: number; qualified: ProgressRow[] }>(`${this.base}/certificates/qualified`);
+  // Certificates — every registered student is eligible, regardless of
+  // categories completed.
+  getQualified(): Observable<{ qualified: ProgressRow[] }> {
+    return this.http.get<{ qualified: ProgressRow[] }>(`${this.base}/certificates/qualified`);
   }
 
   getCertificateBlob(studentId: string, division?: string, dates?: string): Observable<Blob> {
@@ -130,6 +131,37 @@ export class ApiService {
   // Plain rank 1-10 results list for one category (not per-student certificates).
   getRankingsListBlob(categoryId: number): Observable<Blob> {
     return this.http.get(`${this.base}/rankings/list.pdf?category_id=${categoryId}`, { responseType: 'blob' });
+  }
+
+  // Category awards (Radio Broadcasting / Scriptwriting) — named awards
+  // instead of numeric rank, some of which allow multiple students.
+  getAwardSchemes(): Observable<AwardSchemes> {
+    return this.http.get<AwardSchemes>(`${this.base}/category-awards/schemes`);
+  }
+
+  getCategoryAwards(): Observable<CategoryAward[]> {
+    return this.http.get<CategoryAward[]>(`${this.base}/category-awards`);
+  }
+
+  setCategoryAward(payload: { category_id: number; student_id: string; award_label: string }): Observable<any> {
+    return this.http.post(`${this.base}/category-awards`, payload);
+  }
+
+  deleteCategoryAward(id: string): Observable<{ message: string }> {
+    return this.http.delete<{ message: string }>(`${this.base}/category-awards/${id}`);
+  }
+
+  getCategoryAwardCertificateBlob(awardId: string): Observable<Blob> {
+    return this.http.get(`${this.base}/category-awards/${awardId}/certificate.pdf`, { responseType: 'blob' });
+  }
+
+  getCategoryAwardsBulkBlob(ids?: string[] | 'all'): Observable<Blob> {
+    const idsParam = !ids || ids === 'all' ? 'all' : ids.join(',');
+    return this.http.get(`${this.base}/category-awards/bulk.pdf?ids=${encodeURIComponent(idsParam)}`, { responseType: 'blob' });
+  }
+
+  getCategoryAwardsListBlob(categoryId: number): Observable<Blob> {
+    return this.http.get(`${this.base}/category-awards/list.pdf?category_id=${categoryId}`, { responseType: 'blob' });
   }
 
   // Certificate templates (admin-only visual designer)

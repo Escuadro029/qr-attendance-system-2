@@ -118,7 +118,18 @@ function buildRankingsListDocDefinition({ categoryName, rows, eventName, dateRan
   // stray second page, everything (row height, badge size, font sizes, gaps)
   // scales down uniformly (down to a 50% floor) until the whole list is
   // guaranteed to fit in the space available above the footer.
-  const BASE = { rowH: { podium: 96, rest: 56 }, gap: 14, badgeR: { podium: 36, rest: 23 }, nameFS: { podium: 32, rest: 21 }, numFS: { podium: 32, rest: 19 }, nameGap: 26 };
+  const BASE = {
+    rowH: { podium: 104, rest: 62 },
+    gap: 14,
+    badgeR: { podium: 36, rest: 23 },
+    // Name font sizes are a MAX cap, not a fixed size — each row's name is
+    // sized up to fill most of the available width on the right (up to this
+    // cap), shrinking only as far as needed for a long name to still fit on
+    // one line. See the per-row fill calculation below.
+    nameFS: { podium: 52, rest: 34, min: { podium: 20, rest: 14 } },
+    numFS: { podium: 32, rest: 19 },
+    nameGap: 20,
+  };
 
   const rawHeight = (scale) =>
     rows.filter((r) => r.rank <= 3).length * BASE.rowH.podium * scale +
@@ -130,14 +141,14 @@ function buildRankingsListDocDefinition({ categoryName, rows, eventName, dateRan
   const available = listBottom - listTop;
 
   // Floor is a defensive minimum, not the expected case — the worst case
-  // (all 10 ranks assigned) computes to ~0.58 given the constants above,
-  // which stays comfortably above it.
+  // (all 10 ranks assigned) computes to ~0.53 given the constants above,
+  // which stays just above it.
   const unscaledHeight = rawHeight(1);
   const scale = unscaledHeight > available ? Math.max(0.5, available / unscaledHeight) : 1;
   const totalHeight = scale === 1 ? unscaledHeight : rawHeight(scale);
 
   const leftMargin = 92;
-  const rightMargin = PAGE - 92;
+  const rightMargin = PAGE - 70;
 
   let y = listTop + Math.max(0, (available - totalHeight) / 2);
   for (const row of rows) {
@@ -148,17 +159,23 @@ function buildRankingsListDocDefinition({ categoryName, rows, eventName, dateRan
     const badgeCy = y + rowH / 2;
     const numberFontSize = (isPodium ? BASE.numFS.podium : BASE.numFS.rest) * scale;
 
-    // A long full name at the base font size could wrap onto a second line
-    // and run into the row below (rows are only tall enough for one line).
-    // Estimate the rendered width (Roboto Bold averages ~0.52x fontSize per
-    // character) and shrink just this row's name down to a single line
-    // instead, rather than let it wrap and overlap.
+    // The name is sized to fill most of the available width on the right
+    // rather than sitting at one small fixed size — short names render at
+    // the tier's max cap (big and prominent), longer names scale down only
+    // as far as needed to still occupy the row on one line, never wrapping
+    // (which would run into the row below, since rows are one line tall).
+    // Estimated at ~0.52x fontSize per character, an average for Roboto Bold.
     const nameX = badgeCx + badgeR + BASE.nameGap * scale;
     const nameWidth = rightMargin - nameX;
-    let nameFontSize = (isPodium ? BASE.nameFS.podium : BASE.nameFS.rest) * scale;
-    const estimatedWidth = row.full_name.length * nameFontSize * 0.52;
-    if (estimatedWidth > nameWidth) {
-      nameFontSize = Math.max(nameFontSize * (nameWidth / estimatedWidth), (isPodium ? 15 : 11) * scale);
+    const maxFontSize = (isPodium ? BASE.nameFS.podium : BASE.nameFS.rest) * scale;
+    const minFontSize = (isPodium ? BASE.nameFS.min.podium : BASE.nameFS.min.rest) * scale;
+    const widthPerUnitFontSize = row.full_name.length * 0.52;
+    let nameFontSize = Math.min(maxFontSize, (nameWidth * 0.94) / widthPerUnitFontSize);
+    nameFontSize = Math.max(nameFontSize, minFontSize);
+    // Defensive: a pathologically long name could still overflow even at the
+    // floor size — shrink further rather than let it wrap and overlap.
+    if (nameFontSize * widthPerUnitFontSize > nameWidth) {
+      nameFontSize = nameWidth / widthPerUnitFontSize;
     }
 
     if (row.rank === 1) {
@@ -195,4 +212,14 @@ function buildRankingsListDocDefinition({ categoryName, rows, eventName, dateRan
   };
 }
 
-module.exports = { isTeamCategory, buildRankingsListDocDefinition };
+module.exports = {
+  isTeamCategory,
+  buildRankingsListDocDefinition,
+  // Shared low-level pdfmake node builders, reused by awardsListPdf.js so
+  // both "square social-media leaderboard" PDFs stay visually consistent
+  // without duplicating the same canvas/text plumbing.
+  textNode,
+  rectNode,
+  lineNode,
+  headlineFontSize,
+};

@@ -24,7 +24,7 @@ const PAGE_SIZE = 10;
         <div class="head-row">
           <div>
             <h1 class="headline">Student Certificates</h1>
-            <p class="lede">Students who completed {{ threshold() }} or more journalism categories qualify for a Certificate of Recognition.</p>
+            <p class="lede">Print a Certificate of Recognition for any registered student.</p>
           </div>
           <div class="head-actions">
             <button class="btn btn-outline" (click)="viewSample()">Preview Sample Certificate</button>
@@ -56,7 +56,7 @@ const PAGE_SIZE = 10;
                   </tr>
                 }
                 @empty {
-                  <tr><td colspan="4" class="placeholder">No students have qualified yet.</td></tr>
+                  <tr><td colspan="4" class="placeholder">No students registered yet.</td></tr>
                 }
               </tbody>
             </table>
@@ -168,9 +168,8 @@ const PAGE_SIZE = 10;
 export class CertificatesComponent implements OnInit {
   mode = signal<Mode>('student');
 
-  // Students
+  // Students — every registered student is eligible for a certificate.
   qualified = signal<ProgressRow[]>([]);
-  threshold = signal(6);
   loading = signal(true);
   downloadingId = signal<string | null>(null);
   studentBulkPrinting = signal(false);
@@ -204,7 +203,6 @@ export class CertificatesComponent implements OnInit {
     this.api.getQualified().subscribe({
       next: (res) => {
         this.qualified.set(res.qualified);
-        this.threshold.set(res.threshold);
       },
       complete: () => this.loading.set(false),
     });

@@ -448,7 +448,7 @@ async function renderCertificatePdf(opts, res) {
 }
 
 function buildRankingMergeData({
-  student, categoryName, rank, eventName, dateRange, venue,
+  student, categoryName, rank, awardLabel, eventName, dateRange, venue,
   schoolName, officeLine, signatoryName, signatoryTitle, controlNo, customFields,
 }) {
   const finalControlNo = controlNo || generateControlNo('PRESSCONF-RANK');
@@ -458,7 +458,9 @@ function buildRankingMergeData({
     section: student.section,
     school_name: schoolName || 'Your School Name',
     category_name: categoryName,
-    rank_word: RANK_WORDS[rank] || 'OUTSTANDING',
+    // Named awards (e.g. "Champion", "Best News Anchor") use their own label
+    // text in place of the numeral-ordinal rank word.
+    rank_word: awardLabel ? awardLabel.toUpperCase() : (RANK_WORDS[rank] || 'OUTSTANDING'),
     event_name: eventName || 'School Press Conference',
     date_range: dateRange || 'on the scheduled date',
     venue: venue || '',

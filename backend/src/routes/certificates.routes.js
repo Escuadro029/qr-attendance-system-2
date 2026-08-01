@@ -7,26 +7,27 @@ const { getTemplate } = require('../utils/certificateTemplateStore');
 const { getSettings } = require('../utils/certificateSettingsStore');
 
 const router = express.Router();
-const QUALIFYING_THRESHOLD = 6;
 
-// GET /api/certificates/qualified -> students with >= 6 distinct categories
+// GET /api/certificates/qualified -> every registered student, with their
+// categories-completed count for reference. Every student is eligible for a
+// Certificate of Recognition regardless of how many categories they've
+// completed — there is no minimum category count required.
 router.get('/qualified', requireAuth, async (req, res) => {
   try {
     const result = await pool.query(
       `SELECT s.id AS student_id, s.full_name, s.grade, s.section,
               COUNT(DISTINCT a.category_id)::int AS categories_completed
        FROM students s
-       JOIN attendance a ON a.student_id = s.id
+       LEFT JOIN attendance a ON a.student_id = s.id
        WHERE s.tenant_id = $1
        GROUP BY s.id, s.full_name, s.grade, s.section
-       HAVING COUNT(DISTINCT a.category_id) >= $2
        ORDER BY categories_completed DESC, s.full_name`,
-      [req.user.tenant_id, QUALIFYING_THRESHOLD]
+      [req.user.tenant_id]
     );
-    res.json({ threshold: QUALIFYING_THRESHOLD, qualified: result.rows });
+    res.json({ qualified: result.rows });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: 'Failed to fetch qualified students' });
+    res.status(500).json({ error: 'Failed to fetch students' });
   }
 });
 
@@ -53,12 +54,13 @@ router.get('/sample.pdf', requireAuth, async (req, res) => {
 });
 
 // GET /api/certificates/bulk.pdf?ids=uuid1,uuid2,...  (or ?ids=all)
-// Two-per-sheet printable pack: each qualified student's certificate is
-// scaled to half size and stacked with another's on one physical sheet
-// (same paper size/orientation as the saved template), with a dashed
-// cut-line between — halves the bond paper needed versus one page each.
-// Must be registered before /:studentId.pdf, which would otherwise treat
-// "bulk" as a studentId and shadow this route.
+// Two-per-sheet printable pack: each student's certificate is scaled to half
+// size and stacked with another's on one physical sheet (same paper
+// size/orientation as the saved template), with a dashed cut-line between —
+// halves the bond paper needed versus one page each. Every student is
+// eligible regardless of categories completed. Must be registered before
+// /:studentId.pdf, which would otherwise treat "bulk" as a studentId and
+// shadow this route.
 router.get('/bulk.pdf', requireAuth, async (req, res) => {
   try {
     const idsParam = req.query.ids;
@@ -67,12 +69,11 @@ router.get('/bulk.pdf', requireAuth, async (req, res) => {
       result = await pool.query(
         `SELECT s.*, COUNT(DISTINCT a.category_id)::int AS categories_completed
          FROM students s
-         JOIN attendance a ON a.student_id = s.id
+         LEFT JOIN attendance a ON a.student_id = s.id
          WHERE s.tenant_id = $1
          GROUP BY s.id
-         HAVING COUNT(DISTINCT a.category_id) >= $2
          ORDER BY s.grade, s.section, s.full_name`,
-        [req.user.tenant_id, QUALIFYING_THRESHOLD]
+        [req.user.tenant_id]
       );
     } else {
       const ids = idsParam.split(',').filter(Boolean);
@@ -80,17 +81,16 @@ router.get('/bulk.pdf', requireAuth, async (req, res) => {
       result = await pool.query(
         `SELECT s.*, COUNT(DISTINCT a.category_id)::int AS categories_completed
          FROM students s
-         JOIN attendance a ON a.student_id = s.id
+         LEFT JOIN attendance a ON a.student_id = s.id
          WHERE s.id = ANY($1::uuid[]) AND s.tenant_id = $2
          GROUP BY s.id
-         HAVING COUNT(DISTINCT a.category_id) >= $3
          ORDER BY s.grade, s.section, s.full_name`,
-        [ids, req.user.tenant_id, QUALIFYING_THRESHOLD]
+        [ids, req.user.tenant_id]
       );
     }
 
     if (result.rowCount === 0) {
-      return res.status(400).json({ error: 'None of the selected students have qualified for a certificate yet.' });
+      return res.status(400).json({ error: 'No matching students found.' });
     }
 
     const [template, settings] = await Promise.all([
@@ -129,7 +129,8 @@ router.get('/bulk.pdf', requireAuth, async (req, res) => {
   }
 });
 
-// GET /api/certificates/:studentId.pdf -> generate certificate (only if qualified)
+// GET /api/certificates/:studentId.pdf -> generate certificate for any
+// registered student, regardless of categories completed.
 router.get('/:studentId.pdf', requireAuth, async (req, res) => {
   try {
     const studentRes = await pool.query('SELECT * FROM students WHERE id = $1 AND tenant_id = $2', [
@@ -144,12 +145,6 @@ router.get('/:studentId.pdf', requireAuth, async (req, res) => {
       [student.id, req.user.tenant_id]
     );
     const categoriesCompleted = countRes.rows[0].c;
-
-    if (categoriesCompleted < QUALIFYING_THRESHOLD) {
-      return res.status(403).json({
-        error: `${student.full_name} has only completed ${categoriesCompleted} of ${QUALIFYING_THRESHOLD} required categories.`,
-      });
-    }
 
     const [template, settings] = await Promise.all([
       getTemplate(req.user.tenant_id, 'completion'),

@@ -78,6 +78,26 @@ CREATE TABLE IF NOT EXISTS category_rankings (
   UNIQUE (category_id, rank)
 );
 
+-- Named awards (e.g. "Champion", "Best News Anchor") for categories that
+-- don't fit the plain 1st-10th ranking model — see
+-- backend/src/config/awardSchemes.js for which categories use this and
+-- which of their awards allow more than one student ("group" awards, e.g. a
+-- broadcast team's "Champion") vs exactly one ("solo" awards, e.g. a single
+-- role like "Best News Anchor"). Unlike category_rankings, award_label is
+-- NOT unique per category — multiple rows (multiple students) can share the
+-- same award_label; the API layer enforces the solo/group distinction since
+-- it depends on the award, not the schema.
+CREATE TABLE IF NOT EXISTS category_awards (
+  id            UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  tenant_id     UUID NOT NULL REFERENCES tenants(id),
+  category_id   INT  NOT NULL REFERENCES categories(id) ON DELETE CASCADE,
+  student_id    UUID NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+  award_label   VARCHAR(60) NOT NULL,
+  control_no    VARCHAR(50),
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (category_id, award_label, student_id)
+);
+
 -- Editable, freely-positioned layout for the two certificate types
 -- ("completion" and "ranking"). `elements` is an ordered array of
 -- {id, type: 'text'|'shape'|'image', x, y, width, height, ...style} boxes —
@@ -170,6 +190,11 @@ CREATE TRIGGER trg_rankings_tenant_consistency
   BEFORE INSERT OR UPDATE ON category_rankings
   FOR EACH ROW EXECUTE FUNCTION enforce_tenant_consistency();
 
+DROP TRIGGER IF EXISTS trg_category_awards_tenant_consistency ON category_awards;
+CREATE TRIGGER trg_category_awards_tenant_consistency
+  BEFORE INSERT OR UPDATE ON category_awards
+  FOR EACH ROW EXECUTE FUNCTION enforce_tenant_consistency();
+
 CREATE INDEX IF NOT EXISTS idx_attendance_student ON attendance(student_id);
 CREATE INDEX IF NOT EXISTS idx_attendance_category ON attendance(category_id);
 CREATE INDEX IF NOT EXISTS idx_students_qr_token ON students(qr_token);
@@ -179,6 +204,9 @@ CREATE INDEX IF NOT EXISTS idx_students_tenant ON students(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_categories_tenant ON categories(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_attendance_tenant ON attendance(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_rankings_tenant ON category_rankings(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_category_awards_category ON category_awards(category_id);
+CREATE INDEX IF NOT EXISTS idx_category_awards_tenant ON category_awards(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_category_awards_student ON category_awards(student_id);
 CREATE INDEX IF NOT EXISTS idx_certificate_templates_tenant ON certificate_templates(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_speakers_tenant ON speakers(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_teachers_tenant ON teachers(tenant_id);

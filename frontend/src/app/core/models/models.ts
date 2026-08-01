@@ -13,6 +13,29 @@ export interface Ranking {
   created_at: string;
 }
 
+// Named-award categories (Radio Broadcasting, Scriptwriting) — see
+// backend/src/config/awardSchemes.js. "solo" awards hold exactly one
+// student (group: false); "group" awards can hold several.
+export interface AwardSchemeEntry {
+  label: string;
+  group: boolean;
+}
+
+export type AwardSchemes = Record<string, AwardSchemeEntry[]>;
+
+export interface CategoryAward {
+  id: string;
+  category_id: number;
+  category_name: string;
+  student_id: string;
+  student_name: string;
+  grade: string;
+  section: string;
+  award_label: string;
+  control_no: string;
+  created_at: string;
+}
+
 export interface AppUser {
   id: string;
   full_name: string;

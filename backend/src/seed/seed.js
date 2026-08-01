@@ -13,6 +13,7 @@ const CATEGORIES = [
   'Photojournalism',
   'Editorial Cartooning',
   'Radio Broadcasting',
+  'Scriptwriting',
 ];
 
 async function run() {

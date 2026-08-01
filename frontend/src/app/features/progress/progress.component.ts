@@ -22,7 +22,7 @@ type ModalKind = 'image' | 'pdf' | null;
   template: `
     <div class="container">
       <h1 class="headline">Attendance Progress</h1>
-      <p class="lede">Categories completed per student across all Fridays. {{ QUALIFYING_THRESHOLD }} or more qualifies for a certificate.</p>
+      <p class="lede">Categories completed per student across all Fridays. Every student can receive a Certificate of Completion.</p>
 
       <div class="card">
         <div class="toolbar">
@@ -62,12 +62,9 @@ type ModalKind = 'image' | 'pdf' | null;
           <button class="btn btn-outline btn-sm" (click)="printSelectedCertificates()" [disabled]="selectedIds().size === 0 || bulkCertPrinting()">
             {{ bulkCertPrinting() ? 'Preparing…' : 'Print Selected (2 per sheet)' }}
           </button>
-          <button class="btn btn-gold btn-sm" (click)="printAllCertificates()" [disabled]="qualifiedCount() === 0 || bulkCertPrinting()">
+          <button class="btn btn-gold btn-sm" (click)="printAllCertificates()" [disabled]="rows().length === 0 || bulkCertPrinting()">
             {{ bulkCertPrinting() ? 'Preparing…' : 'Print All (2 per sheet)' }}
           </button>
-          @if (qualifiedCount() === 0) {
-            <span class="bulk-hint">No students have qualified yet ({{ QUALIFYING_THRESHOLD }}+ categories).</span>
-          }
         </div>
 
         @if (loading()) {
@@ -114,9 +111,7 @@ type ModalKind = 'image' | 'pdf' | null;
                     <button class="btn btn-outline btn-sm" (click)="viewQr(row)">QR</button>
                     <button class="btn btn-outline btn-sm" (click)="viewIdCard(row)">ID</button>
                     <button class="btn btn-outline btn-sm" (click)="openPoster(row)">Poster</button>
-                    @if (row.categories_completed >= QUALIFYING_THRESHOLD) {
-                      <button class="btn btn-gold btn-sm" (click)="viewCertificate(row)">Certificate</button>
-                    }
+                    <button class="btn btn-gold btn-sm" (click)="viewCertificate(row)">Certificate</button>
                   </td>
                 </tr>
               }
@@ -184,7 +179,6 @@ type ModalKind = 'image' | 'pdf' | null;
     .poster-bulk-row { margin: -8px 0 8px; justify-content: flex-start; }
     .cert-bulk-row { margin: -8px 0 16px; justify-content: flex-start; }
     .bulk-label { font-size: 0.8rem; color: #777; }
-    .bulk-hint { font-size: 0.78rem; color: #999; }
     .actions { display: flex; gap: 6px; flex-wrap: wrap; }
     .btn-sm { padding: 6px 10px; font-size: 0.78rem; }
     .category-chips { display: flex; flex-wrap: wrap; gap: 4px; max-width: 240px; }
@@ -286,10 +280,6 @@ export class ProgressComponent implements OnInit {
 
   totalPages(): number {
     return Math.max(1, Math.ceil(this.filtered().length / PAGE_SIZE));
-  }
-
-  qualifiedCount(): number {
-    return this.rows().filter((r) => r.categories_completed >= this.QUALIFYING_THRESHOLD).length;
   }
 
   paged(): ProgressRow[] {
@@ -395,9 +385,8 @@ export class ProgressComponent implements OnInit {
     this.downloadBulkCertificates('all');
   }
 
-  // Server-side re-filters to only qualified students (categories_completed
-  // >= QUALIFYING_THRESHOLD) regardless of which ids are passed, so raw
-  // selectedIds() — qualified or not — is safe to send as-is.
+  // Every student is eligible for a certificate regardless of categories
+  // completed, so raw selectedIds() can be sent as-is.
   private downloadBulkCertificates(ids: string[] | 'all') {
     this.bulkCertPrinting.set(true);
     this.api.getCertificatesBulkBlob(ids).subscribe({
